@@ -3479,49 +3479,60 @@ client.on("interactionCreate", async interaction => {
         // ANNOUNCE
         // ==================================================
 
-        if (command === "announce") {
+if (command === "announce") {
 
-            if (
-                !interaction.member.permissions.has(
-                    PermissionFlagsBits.ManageGuild
-                )
-            ) {
-                await interaction.reply({
-                    content:
-                        "❌ You need **Manage Server** permission.",
-                    flags: MessageFlags.Ephemeral
-                });
+    if (
+        !interaction.member.permissions.has(
+            PermissionFlagsBits.ManageGuild
+        )
+    ) {
+        await interaction.reply({
+            content: "❌ You need **Manage Server** permission.",
+            flags: MessageFlags.Ephemeral
+        });
 
-                return;
-            }
+        return;
+    }
 
-            const channel =
-                interaction.options.getChannel("channel");
+    const channel =
+        interaction.options.getChannel("channel");
 
-            const message =
-                interaction.options.getString("message");
+    const message =
+        interaction.options.getString("message");
 
-            const embed =
-                baseEmbed(0x5865f2)
-                    .setTitle("📢 Announcement")
-                    .setDescription(message)
-                    .addFields({
-                        name: "Posted by",
-                        value: `${interaction.user}`
-                    });
+    if (!channel || !channel.isTextBased()) {
+        await interaction.reply({
+            content: "❌ That is not a valid text channel.",
+            flags: MessageFlags.Ephemeral
+        });
 
-            await channel.send({
-                embeds: [embed]
-            });
+        return;
+    }
 
-            await interaction.reply({
-                content:
-                    `✅ Announcement sent to ${channel}.`,
-                flags: MessageFlags.Ephemeral
-            });
+    const embed = baseEmbed(0x5865f2)
+        .setTitle("📢 Announcement")
+        .setDescription(message)
+        .addFields({
+            name: "Posted by",
+            value: `${interaction.user}`
+        });
 
-            return;
+    // Send the announcement FIRST.
+    await channel.send({
+        embeds: [embed],
+        allowedMentions: {
+            parse: []
         }
+    });
+
+    // Then acknowledge the slash command ONCE.
+    await interaction.reply({
+        content: `✅ Announcement sent to ${channel}.`,
+        flags: MessageFlags.Ephemeral
+    });
+
+    return;
+}
 
         // ==================================================
         // POLL
