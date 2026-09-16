@@ -384,63 +384,94 @@ const commands = [
                 .setRequired(false)
         ),
 
-    // --------------------------------------------------
-    // WELCOME
-    // --------------------------------------------------
+// --------------------------------------------------
+// WELCOME
+// --------------------------------------------------
 
-    new SlashCommandBuilder()
-        .setName("welcome")
-        .setDescription("Configure the 27Pro welcome system.")
-        .addSubcommand(sub =>
-            sub
-                .setName("setup")
-                .setDescription("Enable and configure welcome messages.")
-                .addChannelOption(option =>
-                    option
-                        .setName("channel")
-                        .setDescription("Welcome channel.")
-                        .addChannelTypes(ChannelType.GuildText)
-                        .setRequired(true)
-                )
-                .addRoleOption(option =>
-                    option
-                        .setName("role")
-                        .setDescription("Optional role to give new members.")
-                        .setRequired(false)
-                )
-                .addStringOption(option =>
-                    option
-                        .setName("message")
-                        .setDescription("Welcome message.")
-                        .setRequired(false)
-                )
-                .addStringOption(option =>
-                    option
-                        .setName("image")
-                        .setDescription("Optional image URL.")
-                        .setRequired(false)
-                )
-        )
-        .addSubcommand(sub =>
-            sub
-                .setName("config")
-                .setDescription("View welcome configuration.")
-        )
-        .addSubcommand(sub =>
-            sub
-                .setName("preview")
-                .setDescription("Preview the welcome message.")
-        )
-        .addSubcommand(sub =>
-            sub
-                .setName("test")
-                .setDescription("Send a test welcome message.")
-        )
-        .addSubcommand(sub =>
-            sub
-                .setName("disable")
-                .setDescription("Disable welcome messages.")
-        ),
+new SlashCommandBuilder()
+    .setName("welcome")
+    .setDescription("Configure the 27Pro welcome system.")
+
+    // ==================================================
+    // SETUP
+    // ==================================================
+
+    .addSubcommand(sub =>
+        sub
+            .setName("setup")
+            .setDescription("Enable and configure welcome messages.")
+
+            .addChannelOption(option =>
+                option
+                    .setName("channel")
+                    .setDescription("Welcome channel.")
+                    .addChannelTypes(ChannelType.GuildText)
+                    .setRequired(true)
+            )
+
+            .addRoleOption(option =>
+                option
+                    .setName("role")
+                    .setDescription("Optional role to give new members.")
+                    .setRequired(false)
+            )
+
+            .addStringOption(option =>
+                option
+                    .setName("message")
+                    .setDescription(
+                        "Welcome message. Use {user}, {server}, {count}, or {username}."
+                    )
+                    .setRequired(false)
+            )
+
+            .addStringOption(option =>
+                option
+                    .setName("image")
+                    .setDescription("Custom welcome banner/image URL.")
+                    .setRequired(false)
+            )
+    )
+
+    // ==================================================
+    // CONFIG
+    // ==================================================
+
+    .addSubcommand(sub =>
+        sub
+            .setName("config")
+            .setDescription("View welcome configuration.")
+    )
+
+    // ==================================================
+    // PREVIEW
+    // ==================================================
+
+    .addSubcommand(sub =>
+        sub
+            .setName("preview")
+            .setDescription("Preview the welcome message.")
+    )
+
+    // ==================================================
+    // TEST
+    // ==================================================
+
+    .addSubcommand(sub =>
+        sub
+            .setName("test")
+            .setDescription("Send a test welcome message.")
+    )
+
+    // ==================================================
+    // DISABLE
+    // ==================================================
+
+    .addSubcommand(sub =>
+        sub
+            .setName("disable")
+            .setDescription("Disable welcome messages.")
+    ),
 
     // --------------------------------------------------
     // LOGGING
