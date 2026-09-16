@@ -11,11 +11,12 @@ const {
     EmbedBuilder,
     ChannelType,
     REST,
-    Routes
+    Routes,
+    ActivityType
 } = require("discord.js");
 
 // ============================================================
-// ENV
+// 27PRO — ENVIRONMENT
 // ============================================================
 
 const TOKEN = process.env.TOKEN;
@@ -40,154 +41,224 @@ const client = new Client({
 // ============================================================
 
 const server = http.createServer((req, res) => {
-
     res.setHeader("Content-Type", "application/json");
 
     if (req.url === "/" || req.url === "/api/health") {
-
         res.writeHead(200);
 
-        res.end(JSON.stringify({
-            status: "online",
-            bot: client.isReady()
-                ? "online"
-                : "starting",
-            database:
-                mongoose.connection.readyState === 1
-                    ? "connected"
-                    : "disconnected"
-        }));
+        res.end(
+            JSON.stringify({
+                status: "online",
+                bot: client.isReady() ? "online" : "starting",
+                database:
+                    mongoose.connection.readyState === 1
+                        ? "connected"
+                        : "disconnected",
+                uptime: Math.floor(process.uptime())
+            })
+        );
 
         return;
     }
 
     res.writeHead(404);
 
-    res.end(JSON.stringify({
-        error: "Not found"
-    }));
+    res.end(
+        JSON.stringify({
+            error: "Not found"
+        })
+    );
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-
-    console.log(
-        `🌐 Hostinger server listening on port ${PORT}`
-    );
-
+    console.log(`🌐 27Pro HTTP server listening on port ${PORT}`);
 });
 
 // ============================================================
-// DATABASE SCHEMA
+// MONGODB SCHEMA
 // ============================================================
 
-const WelcomeConfigSchema = new mongoose.Schema({
+const WelcomeConfigSchema = new mongoose.Schema(
+    {
+        guildId: {
+            type: String,
+            required: true,
+            unique: true
+        },
 
-    guildId: {
-        type: String,
-        required: true,
-        unique: true
+        enabled: {
+            type: Boolean,
+            default: false
+        },
+
+        channelId: {
+            type: String,
+            default: null
+        },
+
+        roleId: {
+            type: String,
+            default: null
+        },
+
+        image: {
+            type: String,
+            default: null
+        },
+
+        message: {
+            type: String,
+            default: "Welcome {user} to **{server}**!"
+        },
+
+        color: {
+            type: String,
+            default: "#8B0000"
+        }
     },
-
-    enabled: {
-        type: Boolean,
-        default: false
-    },
-
-    channelId: {
-        type: String,
-        default: null
-    },
-
-    roleId: {
-        type: String,
-        default: null
-    },
-
-    image: {
-        type: String,
-        default: null
-    },
-
-    message: {
-        type: String,
-        default: "Welcome {user} to {server}!"
+    {
+        timestamps: true
     }
-
-}, {
-    timestamps: true
-});
+);
 
 const WelcomeConfig =
     mongoose.models.WelcomeConfig ||
-    mongoose.model(
-        "WelcomeConfig",
-        WelcomeConfigSchema
-    );
+    mongoose.model("WelcomeConfig", WelcomeConfigSchema);
 
 // ============================================================
-// CONNECT DATABASE
+// DATABASE
 // ============================================================
 
 async function connectDatabase() {
-
     if (!MONGODB_URI) {
-
-        console.error(
-            "❌ MONGODB_URI is missing."
-        );
-
+        console.error("❌ MONGODB_URI is missing.");
         return;
     }
 
     try {
+        await mongoose.connect(MONGODB_URI, {
+            serverSelectionTimeoutMS: 10000
+        });
 
-        await mongoose.connect(
-            MONGODB_URI,
-            {
-                serverSelectionTimeoutMS: 10000
-            }
-        );
-
-        console.log(
-            "✅ MongoDB connected."
-        );
-
+        console.log("✅ MongoDB connected.");
     } catch (error) {
-
-        console.error(
-            "❌ MongoDB connection failed:"
-        );
-
-        console.error(
-            error.message
-        );
+        console.error("❌ MongoDB connection failed:");
+        console.error(error.message);
     }
 }
 
 // ============================================================
-// SLASH COMMAND
+// COLOR HELPER
+// ============================================================
+
+function getColor(color) {
+    if (!color) {
+        return 0x8B0000;
+    }
+
+    const cleaned = color.replace("#", "");
+
+    if (!/^[0-9A-Fa-f]{6}$/.test(cleaned)) {
+        return 0x8B0000;
+    }
+
+    return parseInt(cleaned, 16);
+}
+
+// ============================================================
+// MESSAGE VARIABLES
+// ============================================================
+
+function formatMessage(message, member) {
+    return message
+        .replaceAll("{user}", `<@${member.id}>`)
+        .replaceAll("{username}", member.user.username)
+        .replaceAll("{displayname}", member.displayName)
+        .replaceAll("{server}", member.guild.name)
+        .replaceAll("{count}", member.guild.memberCount.toString())
+        .replaceAll("{id}", member.id);
+}
+
+// ============================================================
+// WELCOME EMBED
+// ============================================================
+
+function createWelcomeEmbed(config, member) {
+    const message = formatMessage(
+        config.message ||
+            "Welcome {user} to **{server}**!",
+        member
+    );
+
+    const embed = new EmbedBuilder()
+        .setTitle("✦ Welcome to the server")
+        .setDescription(message)
+        .setColor(getColor(config.color))
+        .setThumbnail(
+            member.user.displayAvatarURL({
+                extension: "png",
+                size: 256
+            })
+        )
+        .addFields(
+            {
+                name: "👤 Member",
+                value: `<@${member.id}>`,
+                inline: true
+            },
+            {
+                name: "🔢 Member #",
+                value: `${member.guild.memberCount}`,
+                inline: true
+            },
+            {
+                name: "📅 Account",
+                value:
+                    `<t:${Math.floor(
+                        member.user.createdTimestamp / 1000
+                    )}:R>`,
+                inline: true
+            }
+        )
+        .setFooter({
+            text: `${member.guild.name} • 27Pro`
+        })
+        .setTimestamp();
+
+    if (config.image) {
+        embed.setImage(config.image);
+    }
+
+    return embed;
+}
+
+// ============================================================
+// /WELCOME COMMAND
 // ============================================================
 
 const welcomeCommand =
     new SlashCommandBuilder()
         .setName("welcome")
         .setDescription(
-            "Configure the server welcome system"
+            "Manage the 27Pro welcome system"
         )
 
+        // ----------------------------------------------------
         // SETUP
+        // ----------------------------------------------------
+
         .addSubcommand(subcommand =>
             subcommand
                 .setName("setup")
                 .setDescription(
-                    "Setup the welcome system"
+                    "Configure the welcome system"
                 )
 
                 .addChannelOption(option =>
                     option
                         .setName("channel")
                         .setDescription(
-                            "Welcome channel"
+                            "Channel for welcome messages"
                         )
                         .addChannelTypes(
                             ChannelType.GuildText
@@ -221,23 +292,62 @@ const welcomeCommand =
                         )
                         .setRequired(true)
                 )
+
+                .addStringOption(option =>
+                    option
+                        .setName("color")
+                        .setDescription(
+                            "Embed color, example: #8B0000"
+                        )
+                        .setRequired(false)
+                )
         )
 
+        // ----------------------------------------------------
         // CONFIG
+        // ----------------------------------------------------
+
         .addSubcommand(subcommand =>
             subcommand
                 .setName("config")
                 .setDescription(
-                    "View welcome settings"
+                    "View welcome configuration"
                 )
         )
 
+        // ----------------------------------------------------
+        // TEST
+        // ----------------------------------------------------
+
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName("test")
+                .setDescription(
+                    "Send a test welcome message"
+                )
+        )
+
+        // ----------------------------------------------------
+        // PREVIEW
+        // ----------------------------------------------------
+
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName("preview")
+                .setDescription(
+                    "Preview the welcome message"
+                )
+        )
+
+        // ----------------------------------------------------
         // DISABLE
+        // ----------------------------------------------------
+
         .addSubcommand(subcommand =>
             subcommand
                 .setName("disable")
                 .setDescription(
-                    "Disable welcome messages"
+                    "Disable the welcome system"
                 )
         )
 
@@ -246,35 +356,48 @@ const welcomeCommand =
         );
 
 // ============================================================
-// REGISTER COMMAND
+// /PING
+// ============================================================
+
+const pingCommand =
+    new SlashCommandBuilder()
+        .setName("ping")
+        .setDescription(
+            "Check 27Pro latency"
+        );
+
+// ============================================================
+// /BOTINFO
+// ============================================================
+
+const botInfoCommand =
+    new SlashCommandBuilder()
+        .setName("botinfo")
+        .setDescription(
+            "Show 27Pro information"
+        );
+
+// ============================================================
+// REGISTER SLASH COMMANDS
 // ============================================================
 
 async function registerCommands() {
-
     try {
-
         if (!TOKEN) {
-            throw new Error(
-                "TOKEN is missing"
-            );
+            throw new Error("TOKEN is missing");
         }
 
         if (!CLIENT_ID) {
-            throw new Error(
-                "CLIENT_ID is missing"
-            );
+            throw new Error("CLIENT_ID is missing");
         }
 
         if (!GUILD_ID) {
-            throw new Error(
-                "GUILD_ID is missing"
-            );
+            throw new Error("GUILD_ID is missing");
         }
 
-        const rest =
-            new REST({
-                version: "10"
-            }).setToken(TOKEN);
+        const rest = new REST({
+            version: "10"
+        }).setToken(TOKEN);
 
         await rest.put(
             Routes.applicationGuildCommands(
@@ -283,24 +406,22 @@ async function registerCommands() {
             ),
             {
                 body: [
-                    welcomeCommand.toJSON()
+                    welcomeCommand.toJSON(),
+                    pingCommand.toJSON(),
+                    botInfoCommand.toJSON()
                 ]
             }
         );
 
         console.log(
-            "✅ /welcome registered successfully."
+            "✅ 27Pro slash commands registered."
         );
-
     } catch (error) {
-
         console.error(
             "❌ Command registration failed:"
         );
 
-        console.error(
-            error.message
-        );
+        console.error(error.message);
     }
 }
 
@@ -309,25 +430,49 @@ async function registerCommands() {
 // ============================================================
 
 client.once("ready", async () => {
+    console.log("");
+    console.log("======================================");
+    console.log("          27PRO BOT ONLINE");
+    console.log("======================================");
 
     console.log(
-        "======================================"
+        `🤖 Bot: ${client.user.tag}`
     );
 
     console.log(
-        `🤖 BOT ONLINE: ${client.user.tag}`
+        `🆔 ID: ${client.user.id}`
     );
 
     console.log(
-        `🏠 SERVERS: ${client.guilds.cache.size}`
+        `🏠 Servers: ${client.guilds.cache.size}`
     );
 
     console.log(
-        "======================================"
+        `👥 Users: ${client.guilds.cache.reduce(
+            (total, guild) =>
+                total + guild.memberCount,
+            0
+        )}`
     );
+
+    console.log(
+        `📡 Ping: ${client.ws.ping}ms`
+    );
+
+    console.log("======================================");
+    console.log("");
 
     await registerCommands();
 
+    client.user.setPresence({
+        activities: [
+            {
+                name: "your server",
+                type: ActivityType.Watching
+            }
+        ],
+        status: "online"
+    });
 });
 
 // ============================================================
@@ -338,30 +483,148 @@ client.on(
     "interactionCreate",
     async interaction => {
 
-        if (!interaction.isChatInputCommand()) {
+        // ====================================================
+        // PING
+        // ====================================================
+
+        if (
+            interaction.isChatInputCommand() &&
+            interaction.commandName === "ping"
+        ) {
+
+            await interaction.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("🏓 Pong!")
+                        .setDescription(
+                            `27Pro WebSocket latency: **${client.ws.ping}ms**`
+                        )
+                        .setColor(0x8B0000)
+                        .setFooter({
+                            text: "27Pro"
+                        })
+                        .setTimestamp()
+                ],
+                ephemeral: true
+            });
+
             return;
         }
 
+        // ====================================================
+        // BOTINFO
+        // ====================================================
+
         if (
+            interaction.isChatInputCommand() &&
+            interaction.commandName === "botinfo"
+        ) {
+
+            const uptime =
+                Math.floor(process.uptime());
+
+            const hours =
+                Math.floor(uptime / 3600);
+
+            const minutes =
+                Math.floor(
+                    (uptime % 3600) / 60
+                );
+
+            const seconds =
+                uptime % 60;
+
+            const totalUsers =
+                client.guilds.cache.reduce(
+                    (total, guild) =>
+                        total + guild.memberCount,
+                    0
+                );
+
+            const embed =
+                new EmbedBuilder()
+                    .setTitle("🤖 27Pro")
+                    .setDescription(
+                        "All-in-one Discord welcome & utility bot."
+                    )
+                    .setColor(0x8B0000)
+                    .addFields(
+                        {
+                            name: "🏠 Servers",
+                            value:
+                                `${client.guilds.cache.size}`,
+                            inline: true
+                        },
+                        {
+                            name: "👥 Users",
+                            value:
+                                `${totalUsers}`,
+                            inline: true
+                        },
+                        {
+                            name: "📡 Ping",
+                            value:
+                                `${client.ws.ping}ms`,
+                            inline: true
+                        },
+                        {
+                            name: "⏱️ Uptime",
+                            value:
+                                `${hours}h ${minutes}m ${seconds}s`,
+                            inline: true
+                        },
+                        {
+                            name: "💾 Database",
+                            value:
+                                mongoose.connection
+                                    .readyState === 1
+                                    ? "🟢 Connected"
+                                    : "🔴 Disconnected",
+                            inline: true
+                        },
+                        {
+                            name: "⚡ Runtime",
+                            value:
+                                "Hostinger Node.js",
+                            inline: true
+                        }
+                    )
+                    .setFooter({
+                        text:
+                            "27Pro • Made by iik27"
+                    })
+                    .setTimestamp();
+
+            await interaction.reply({
+                embeds: [embed],
+                ephemeral: true
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // ONLY HANDLE /WELCOME BELOW
+        // ====================================================
+
+        if (
+            !interaction.isChatInputCommand() ||
             interaction.commandName !== "welcome"
         ) {
             return;
         }
 
         // ====================================================
-        // ACKNOWLEDGE DISCORD IMMEDIATELY
+        // IMMEDIATE DISCORD ACK
         // ====================================================
 
         try {
-
             await interaction.deferReply({
                 ephemeral: true
             });
-
         } catch (error) {
-
             console.error(
-                "❌ Could not acknowledge interaction:",
+                "❌ Interaction acknowledgement failed:",
                 error.message
             );
 
@@ -431,6 +694,11 @@ client.on(
                     "message"
                 );
 
+            const color =
+                interaction.options.getString(
+                    "color"
+                ) || "#8B0000";
+
             // ------------------------------------------------
             // IMAGE VALIDATION
             // ------------------------------------------------
@@ -444,9 +712,7 @@ client.on(
                     url.protocol !== "http:" &&
                     url.protocol !== "https:"
                 ) {
-                    throw new Error(
-                        "Invalid protocol"
-                    );
+                    throw new Error();
                 }
 
             } catch {
@@ -460,7 +726,23 @@ client.on(
             }
 
             // ------------------------------------------------
-            // BOT ROLE CHECK
+            // COLOR VALIDATION
+            // ------------------------------------------------
+
+            if (
+                !/^#[0-9A-Fa-f]{6}$/.test(color)
+            ) {
+
+                await interaction.editReply({
+                    content:
+                        "❌ Color must look like `#8B0000`."
+                });
+
+                return;
+            }
+
+            // ------------------------------------------------
+            // BOT MEMBER
             // ------------------------------------------------
 
             const botMember =
@@ -470,7 +752,33 @@ client.on(
 
                 await interaction.editReply({
                     content:
-                        "❌ I couldn't find my bot member in this server."
+                        "❌ I couldn't find 27Pro in this server."
+                });
+
+                return;
+            }
+
+            // ------------------------------------------------
+            // ROLE VALIDATION
+            // ------------------------------------------------
+
+            if (
+                role.id === interaction.guild.id
+            ) {
+
+                await interaction.editReply({
+                    content:
+                        "❌ You cannot use @everyone as the welcome role."
+                });
+
+                return;
+            }
+
+            if (role.managed) {
+
+                await interaction.editReply({
+                    content:
+                        "❌ That role is managed by an integration and cannot be assigned."
                 });
 
                 return;
@@ -483,25 +791,50 @@ client.on(
 
                 await interaction.editReply({
                     content:
-                        "❌ My bot role must be ABOVE the welcome role."
+                        "❌ 27Pro's bot role must be **above** the welcome role."
                 });
 
                 return;
             }
 
             // ------------------------------------------------
-            // SAVE
+            // CHANNEL PERMISSIONS
+            // ------------------------------------------------
+
+            const permissions =
+                channel.permissionsFor(
+                    botMember
+                );
+
+            if (
+                !permissions?.has(
+                    [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.EmbedLinks
+                    ]
+                )
+            ) {
+
+                await interaction.editReply({
+                    content:
+                        "❌ 27Pro needs **View Channel**, **Send Messages**, and **Embed Links** permissions in that channel."
+                });
+
+                return;
+            }
+
+            // ------------------------------------------------
+            // SAVE CONFIGURATION
             // ------------------------------------------------
 
             try {
 
                 await WelcomeConfig.findOneAndUpdate(
-
                     {
                         guildId:
                             interaction.guild.id
                     },
-
                     {
                         guildId:
                             interaction.guild.id,
@@ -519,9 +852,11 @@ client.on(
                             image,
 
                         message:
-                            message
-                    },
+                            message,
 
+                        color:
+                            color
+                    },
                     {
                         upsert:
                             true,
@@ -534,50 +869,58 @@ client.on(
                 const embed =
                     new EmbedBuilder()
                         .setTitle(
-                            "Welcome System Enabled"
+                            "✅ 27Pro Welcome System Enabled"
+                        )
+                        .setDescription(
+                            "Everything is configured and ready."
                         )
                         .setColor(
-                            0x8b0000
+                            getColor(color)
                         )
                         .addFields(
                             {
                                 name:
-                                    "Channel",
-
+                                    "📢 Channel",
                                 value:
                                     `<#${channel.id}>`,
-
                                 inline:
                                     true
                             },
                             {
                                 name:
-                                    "Role",
-
+                                    "🎭 Auto Role",
                                 value:
                                     `<@&${role.id}>`,
-
                                 inline:
                                     true
                             },
                             {
                                 name:
-                                    "Message",
-
+                                    "🎨 Color",
+                                value:
+                                    color,
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "💬 Message",
                                 value:
                                     message
                             }
                         )
+                        .setFooter({
+                            text:
+                                "27Pro • Welcome System"
+                        })
                         .setTimestamp();
 
                 await interaction.editReply({
-                    embeds: [
-                        embed
-                    ]
+                    embeds: [embed]
                 });
 
                 console.log(
-                    "✅ Welcome system configured."
+                    `✅ Welcome configured for ${interaction.guild.name}`
                 );
 
             } catch (error) {
@@ -589,7 +932,7 @@ client.on(
 
                 await interaction.editReply({
                     content:
-                        "❌ Database error while saving the welcome configuration."
+                        "❌ Database error while saving the configuration."
                 });
             }
 
@@ -619,7 +962,7 @@ client.on(
 
                     await interaction.editReply({
                         content:
-                            "❌ Welcome system is currently disabled."
+                            "❌ The 27Pro welcome system is currently disabled."
                     });
 
                     return;
@@ -628,65 +971,67 @@ client.on(
                 const embed =
                     new EmbedBuilder()
                         .setTitle(
-                            "Welcome Configuration"
+                            "⚙️ 27Pro Welcome Configuration"
                         )
                         .setColor(
-                            0x8b0000
+                            getColor(config.color)
                         )
                         .addFields(
                             {
                                 name:
                                     "Status",
-
                                 value:
                                     "🟢 Enabled",
-
                                 inline:
                                     true
                             },
                             {
                                 name:
                                     "Channel",
-
                                 value:
                                     `<#${config.channelId}>`,
-
                                 inline:
                                     true
                             },
                             {
                                 name:
                                     "Role",
-
                                 value:
                                     `<@&${config.roleId}>`,
-
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Color",
+                                value:
+                                    config.color ||
+                                    "#8B0000",
                                 inline:
                                     true
                             },
                             {
                                 name:
                                     "Message",
-
                                 value:
                                     config.message ||
                                     "Not configured"
                             }
-                        );
+                        )
+                        .setFooter({
+                            text:
+                                "27Pro • Welcome System"
+                        })
+                        .setTimestamp();
 
-                if (
-                    config.image
-                ) {
-
+                if (config.image) {
                     embed.setImage(
                         config.image
                     );
                 }
 
                 await interaction.editReply({
-                    embeds: [
-                        embed
-                    ]
+                    embeds: [embed]
                 });
 
             } catch (error) {
@@ -698,7 +1043,141 @@ client.on(
 
                 await interaction.editReply({
                     content:
-                        "❌ Failed to load the welcome configuration."
+                        "❌ Failed to load the configuration."
+                });
+            }
+
+            return;
+        }
+
+        // ====================================================
+        // PREVIEW
+        // ====================================================
+
+        if (
+            subcommand === "preview"
+        ) {
+
+            try {
+
+                const config =
+                    await WelcomeConfig.findOne({
+                        guildId:
+                            interaction.guild.id
+                    });
+
+                if (
+                    !config ||
+                    !config.enabled
+                ) {
+
+                    await interaction.editReply({
+                        content:
+                            "❌ Configure the 27Pro welcome system first."
+                    });
+
+                    return;
+                }
+
+                const embed =
+                    createWelcomeEmbed(
+                        config,
+                        interaction.member
+                    );
+
+                await interaction.editReply({
+                    content:
+                        "👀 **27Pro Welcome Preview**",
+                    embeds: [embed]
+                });
+
+            } catch (error) {
+
+                console.error(
+                    "❌ Preview error:",
+                    error
+                );
+
+                await interaction.editReply({
+                    content:
+                        "❌ Failed to create the preview."
+                });
+            }
+
+            return;
+        }
+
+        // ====================================================
+        // TEST
+        // ====================================================
+
+        if (
+            subcommand === "test"
+        ) {
+
+            try {
+
+                const config =
+                    await WelcomeConfig.findOne({
+                        guildId:
+                            interaction.guild.id,
+
+                        enabled:
+                            true
+                    });
+
+                if (!config) {
+
+                    await interaction.editReply({
+                        content:
+                            "❌ Configure the 27Pro welcome system first."
+                    });
+
+                    return;
+                }
+
+                const channel =
+                    interaction.guild.channels.cache.get(
+                        config.channelId
+                    );
+
+                if (!channel) {
+
+                    await interaction.editReply({
+                        content:
+                            "❌ The configured welcome channel no longer exists."
+                    });
+
+                    return;
+                }
+
+                const embed =
+                    createWelcomeEmbed(
+                        config,
+                        interaction.member
+                    );
+
+                await channel.send({
+                    content:
+                        `🧪 **27Pro Welcome Test**\n<@${interaction.user.id}>`,
+                    embeds: [embed]
+                });
+
+                await interaction.editReply({
+                    content:
+                        `✅ Test message sent to <#${channel.id}>.`
+                });
+
+            } catch (error) {
+
+                console.error(
+                    "❌ Test error:",
+                    error
+                );
+
+                await interaction.editReply({
+                    content:
+                        "❌ Failed to send the test message."
                 });
             }
 
@@ -717,17 +1196,14 @@ client.on(
 
                 const config =
                     await WelcomeConfig.findOneAndUpdate(
-
                         {
                             guildId:
                                 interaction.guild.id
                         },
-
                         {
                             enabled:
                                 false
                         },
-
                         {
                             new:
                                 true
@@ -738,7 +1214,7 @@ client.on(
 
                     await interaction.editReply({
                         content:
-                            "❌ No welcome configuration exists for this server."
+                            "❌ No 27Pro welcome configuration exists for this server."
                     });
 
                     return;
@@ -746,8 +1222,12 @@ client.on(
 
                 await interaction.editReply({
                     content:
-                        "✅ Welcome system disabled."
+                        "🔴 **27Pro Welcome System Disabled**\n\nNew members will no longer receive the automatic welcome message or role."
                 });
+
+                console.log(
+                    `🔴 Welcome disabled for ${interaction.guild.name}`
+                );
 
             } catch (error) {
 
@@ -774,7 +1254,7 @@ client.on(
     async member => {
 
         console.log(
-            `👤 MEMBER JOINED: ${member.user.tag}`
+            `👤 MEMBER JOINED: ${member.user.tag} → ${member.guild.name}`
         );
 
         try {
@@ -791,19 +1271,17 @@ client.on(
             if (!config) {
 
                 console.log(
-                    "ℹ️ Welcome system is not configured for this server."
+                    "ℹ️ Welcome system is disabled/not configured."
                 );
 
                 return;
             }
 
             // =================================================
-            // ROLE
+            // AUTOMATIC ROLE
             // =================================================
 
-            if (
-                config.roleId
-            ) {
+            if (config.roleId) {
 
                 try {
 
@@ -818,10 +1296,17 @@ client.on(
                             "⚠️ Welcome role not found."
                         );
 
+                    } else if (role.managed) {
+
+                        console.log(
+                            "⚠️ Welcome role is managed."
+                        );
+
                     } else {
 
                         await member.roles.add(
-                            role
+                            role,
+                            "27Pro automatic welcome role"
                         );
 
                         console.log(
@@ -839,7 +1324,7 @@ client.on(
             }
 
             // =================================================
-            // CHANNEL
+            // WELCOME CHANNEL
             // =================================================
 
             const channel =
@@ -857,62 +1342,46 @@ client.on(
             }
 
             // =================================================
-            // MESSAGE VARIABLES
+            // PERMISSIONS
             // =================================================
 
-            let message =
-                config.message ||
-                "Welcome {user} to {server}!";
+            const botMember =
+                member.guild.members.me;
 
-            message =
-                message
-                    .replaceAll(
-                        "{user}",
-                        `<@${member.id}>`
-                    )
-                    .replaceAll(
-                        "{username}",
-                        member.user.username
-                    )
-                    .replaceAll(
-                        "{server}",
-                        member.guild.name
+            if (botMember) {
+
+                const permissions =
+                    channel.permissionsFor(
+                        botMember
                     );
 
+                if (
+                    !permissions?.has(
+                        [
+                            PermissionFlagsBits.ViewChannel,
+                            PermissionFlagsBits.SendMessages,
+                            PermissionFlagsBits.EmbedLinks
+                        ]
+                    )
+                ) {
+
+                    console.log(
+                        "❌ Missing permissions in welcome channel."
+                    );
+
+                    return;
+                }
+            }
+
             // =================================================
-            // EMBED
+            // CREATE EMBED
             // =================================================
 
             const embed =
-                new EmbedBuilder()
-                    .setTitle(
-                        "Welcome!"
-                    )
-                    .setDescription(
-                        message
-                    )
-                    .setColor(
-                        0x8b0000
-                    )
-                    .setThumbnail(
-                        member.user.displayAvatarURL({
-                            size: 256
-                        })
-                    )
-                    .setFooter({
-                        text:
-                            member.guild.name
-                    })
-                    .setTimestamp();
-
-            if (
-                config.image
-            ) {
-
-                embed.setImage(
-                    config.image
+                createWelcomeEmbed(
+                    config,
+                    member
                 );
-            }
 
             // =================================================
             // SEND
@@ -921,19 +1390,17 @@ client.on(
             await channel.send({
                 content:
                     `<@${member.id}>`,
-                embeds: [
-                    embed
-                ]
+                embeds: [embed]
             });
 
             console.log(
-                "✅ WELCOME MESSAGE SENT"
+                "✅ 27PRO WELCOME MESSAGE SENT"
             );
 
         } catch (error) {
 
             console.error(
-                "❌ Welcome error:",
+                "❌ Welcome event error:",
                 error
             );
         }
@@ -947,7 +1414,6 @@ client.on(
 client.on(
     "error",
     error => {
-
         console.error(
             "❌ Discord error:",
             error
@@ -958,9 +1424,42 @@ client.on(
 client.on(
     "shardError",
     error => {
-
         console.error(
             "❌ Discord WebSocket error:",
+            error
+        );
+    }
+);
+
+client.on(
+    "warn",
+    warning => {
+        console.warn(
+            "⚠️ Discord warning:",
+            warning
+        );
+    }
+);
+
+// ============================================================
+// PROCESS ERRORS
+// ============================================================
+
+process.on(
+    "unhandledRejection",
+    error => {
+        console.error(
+            "❌ Unhandled Promise Rejection:",
+            error
+        );
+    }
+);
+
+process.on(
+    "uncaughtException",
+    error => {
+        console.error(
+            "❌ Uncaught Exception:",
             error
         );
     }
@@ -973,7 +1472,7 @@ client.on(
 async function startBot() {
 
     console.log(
-        "🔌 Connecting to Discord..."
+        "🔌 Connecting 27Pro to Discord..."
     );
 
     if (!TOKEN) {
@@ -1008,5 +1507,4 @@ async function startBot() {
 // ============================================================
 
 connectDatabase();
-
 startBot();
