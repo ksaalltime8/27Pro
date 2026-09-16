@@ -1,8 +1,7 @@
 require("dotenv").config();
 
-const express = require("express");
+const http = require("http");
 const mongoose = require("mongoose");
-
 const {
     Client,
     GatewayIntentBits,
@@ -14,75 +13,95 @@ const {
     Routes
 } = require("discord.js");
 
-// ======================================================
-// ENVIRONMENT VARIABLES
-// ======================================================
+// ============================================================
+// CONFIG
+// ============================================================
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const MONGODB_URI = process.env.MONGODB_URI;
-const PORT = process.env.PORT || 5000;
 
-// ======================================================
-// CHECK REQUIRED VARIABLES
-// ======================================================
+const PORT = Number(process.env.PORT) || 5000;
 
-if (!TOKEN) {
-    console.error("❌ TOKEN is missing");
-}
+// ============================================================
+// START HOSTINGER HTTP SERVER FIRST
+// ============================================================
 
-if (!CLIENT_ID) {
-    console.error("❌ CLIENT_ID is missing");
-}
+const httpServer = http.createServer((req, res) => {
 
-if (!GUILD_ID) {
-    console.error("❌ GUILD_ID is missing");
-}
+    // Health check
+    if (req.url === "/" || req.url === "/api/health") {
 
-if (!MONGODB_URI) {
-    console.error("❌ MONGODB_URI is missing");
-}
+        const response = {
+            status: "online",
+            bot: client?.isReady() ? "online" : "starting",
+            database:
+                mongoose.connection.readyState === 1
+                    ? "connected"
+                    : "disconnected",
+            timestamp: new Date().toISOString()
+        };
 
-// ======================================================
-// EXPRESS / HOSTINGER BACKEND
-// ======================================================
+        res.writeHead(200, {
+            "Content-Type": "application/json"
+        });
 
-const app = express();
+        res.end(JSON.stringify(response, null, 2));
 
-app.use(express.json());
+        return;
+    }
 
-app.get("/", (req, res) => {
-    res.status(200).send("K7Devs Discord Bot is online!");
-});
-
-app.get("/api/health", (req, res) => {
-    res.status(200).json({
-        status: "online",
-        bot: client.isReady() ? "connected" : "connecting",
-        database:
-            mongoose.connection.readyState === 1
-                ? "connected"
-                : "disconnected"
+    res.writeHead(404, {
+        "Content-Type": "application/json"
     });
+
+    res.end(JSON.stringify({
+        error: "Not found"
+    }));
 });
 
-// IMPORTANT:
-// Start the HTTP server immediately.
-// Hostinger requires listen() to happen quickly.
-
-const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🌐 Backend listening on port ${PORT}`);
-    console.log(`🌐 http://0.0.0.0:${PORT}`);
+httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log("======================================");
+    console.log(`🌐 Hostinger server running on port ${PORT}`);
+    console.log("======================================");
 });
 
-server.on("error", (error) => {
+httpServer.on("error", error => {
     console.error("❌ HTTP server error:", error);
 });
 
-// ======================================================
+// ============================================================
+// CHECK ENVIRONMENT
+// ============================================================
+
+console.log("======================================");
+console.log("🚀 K7Devs Discord Bot Starting...");
+console.log("======================================");
+
+console.log(
+    `TOKEN: ${TOKEN ? "FOUND" : "MISSING"}`
+);
+
+console.log(
+    `CLIENT_ID: ${CLIENT_ID ? "FOUND" : "MISSING"}`
+);
+
+console.log(
+    `GUILD_ID: ${GUILD_ID ? "FOUND" : "MISSING"}`
+);
+
+console.log(
+    `MONGODB_URI: ${MONGODB_URI ? "FOUND" : "MISSING"}`
+);
+
+console.log(
+    `PORT: ${PORT}`
+);
+
+// ============================================================
 // DISCORD CLIENT
-// ======================================================
+// ============================================================
 
 const client = new Client({
     intents: [
@@ -91,9 +110,9 @@ const client = new Client({
     ]
 });
 
-// ======================================================
-// MONGODB SCHEMA
-// ======================================================
+// ============================================================
+// DATABASE
+// ============================================================
 
 const WelcomeConfigSchema = new mongoose.Schema(
     {
@@ -133,87 +152,157 @@ const WelcomeConfigSchema = new mongoose.Schema(
     }
 );
 
-const WelcomeConfig = mongoose.model(
-    "WelcomeConfig",
-    WelcomeConfigSchema
-);
-
-// ======================================================
-// WELCOME COMMAND
-// ======================================================
-
-const welcomeCommand = new SlashCommandBuilder()
-    .setName("welcome")
-    .setDescription("Configure the welcome system")
-
-    // SETUP
-    .addSubcommand(subcommand =>
-        subcommand
-            .setName("setup")
-            .setDescription("Setup the welcome system")
-
-            .addChannelOption(option =>
-                option
-                    .setName("channel")
-                    .setDescription("Welcome channel")
-                    .addChannelTypes(ChannelType.GuildText)
-                    .setRequired(true)
-            )
-
-            .addRoleOption(option =>
-                option
-                    .setName("role")
-                    .setDescription("Role given to new members")
-                    .setRequired(true)
-            )
-
-            .addStringOption(option =>
-                option
-                    .setName("image")
-                    .setDescription("Welcome image URL")
-                    .setRequired(true)
-            )
-
-            .addStringOption(option =>
-                option
-                    .setName("message")
-                    .setDescription("Welcome message")
-                    .setRequired(true)
-            )
-    )
-
-    // CONFIG
-    .addSubcommand(subcommand =>
-        subcommand
-            .setName("config")
-            .setDescription("View the current welcome configuration")
-    )
-
-    // DISABLE
-    .addSubcommand(subcommand =>
-        subcommand
-            .setName("disable")
-            .setDescription("Disable the welcome system")
-    )
-
-    .setDefaultMemberPermissions(
-        PermissionFlagsBits.ManageGuild
+const WelcomeConfig =
+    mongoose.models.WelcomeConfig ||
+    mongoose.model(
+        "WelcomeConfig",
+        WelcomeConfigSchema
     );
 
-// ======================================================
-// REGISTER SLASH COMMAND
-// ======================================================
+// ============================================================
+// MONGODB
+// ============================================================
+
+async function connectMongoDB() {
+
+    if (!MONGODB_URI) {
+        console.log(
+            "⚠️ MONGODB_URI is missing."
+        );
+
+        return false;
+    }
+
+    try {
+
+        await mongoose.connect(MONGODB_URI);
+
+        console.log(
+            "✅ MongoDB connected."
+        );
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "❌ MongoDB connection failed:"
+        );
+
+        console.error(error.message);
+
+        return false;
+    }
+}
+
+// ============================================================
+// SLASH COMMAND
+// ============================================================
+
+const welcomeCommand =
+    new SlashCommandBuilder()
+        .setName("welcome")
+        .setDescription("Configure the welcome system")
+
+        // SETUP
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName("setup")
+                .setDescription(
+                    "Configure the welcome system"
+                )
+
+                .addChannelOption(option =>
+                    option
+                        .setName("channel")
+                        .setDescription(
+                            "Welcome channel"
+                        )
+                        .addChannelTypes(
+                            ChannelType.GuildText
+                        )
+                        .setRequired(true)
+                )
+
+                .addRoleOption(option =>
+                    option
+                        .setName("role")
+                        .setDescription(
+                            "Role to give new members"
+                        )
+                        .setRequired(true)
+                )
+
+                .addStringOption(option =>
+                    option
+                        .setName("image")
+                        .setDescription(
+                            "Welcome image URL"
+                        )
+                        .setRequired(true)
+                )
+
+                .addStringOption(option =>
+                    option
+                        .setName("message")
+                        .setDescription(
+                            "Welcome message"
+                        )
+                        .setRequired(true)
+                )
+        )
+
+        // CONFIG
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName("config")
+                .setDescription(
+                    "View welcome configuration"
+                )
+        )
+
+        // DISABLE
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName("disable")
+                .setDescription(
+                    "Disable welcome messages"
+                )
+        );
+
+// ============================================================
+// REGISTER COMMAND
+// ============================================================
 
 async function registerCommands() {
-    try {
-        if (!CLIENT_ID || !GUILD_ID || !TOKEN) {
-            console.error(
-                "❌ Cannot register commands: missing CLIENT_ID, GUILD_ID or TOKEN."
-            );
-            return;
-        }
 
-        const rest = new REST({ version: "10" }).setToken(TOKEN);
+    if (!TOKEN) {
+        console.log(
+            "❌ Cannot register commands: TOKEN missing."
+        );
+        return;
+    }
+
+    if (!CLIENT_ID) {
+        console.log(
+            "❌ Cannot register commands: CLIENT_ID missing."
+        );
+        return;
+    }
+
+    if (!GUILD_ID) {
+        console.log(
+            "❌ Cannot register commands: GUILD_ID missing."
+        );
+        return;
+    }
+
+    try {
+
+        const rest =
+            new REST({
+                version: "10"
+            }).setToken(TOKEN);
 
         await rest.put(
             Routes.applicationGuildCommands(
@@ -227,489 +316,670 @@ async function registerCommands() {
             }
         );
 
-        console.log("✅ /welcome command registered.");
-    } catch (error) {
-        console.error(
-            "❌ Failed to register slash commands:",
-            error
+        console.log(
+            "✅ /welcome command registered."
         );
+
+    } catch (error) {
+
+        console.error(
+            "❌ Slash command registration failed:"
+        );
+
+        console.error(error.message);
     }
 }
 
-// ======================================================
-// DISCORD READY
-// ======================================================
+// ============================================================
+// BOT READY
+// ============================================================
 
-client.once("ready", () => {
+client.once("ready", async () => {
+
+    console.log("======================================");
+
     console.log(
-        `🤖 Logged in as ${client.user.tag}`
+        `🤖 Discord connected as ${client.user.tag}`
     );
 
     console.log(
         `🏠 Servers: ${client.guilds.cache.size}`
     );
+
+    console.log(
+        "======================================"
+    );
+
+    await registerCommands();
 });
 
-// ======================================================
-// WELCOME COMMAND HANDLER
-// ======================================================
+// ============================================================
+// WELCOME COMMAND
+// ============================================================
 
-client.on("interactionCreate", async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+client.on(
+    "interactionCreate",
+    async interaction => {
 
-    if (interaction.commandName !== "welcome") return;
-
-    if (!interaction.guild) {
-        return interaction.reply({
-            content: "❌ This command can only be used inside a server.",
-            ephemeral: true
-        });
-    }
-
-    if (
-        !interaction.memberPermissions?.has(
-            PermissionFlagsBits.ManageGuild
-        )
-    ) {
-        return interaction.reply({
-            content:
-                "❌ You need the **Manage Server** permission to use this.",
-            ephemeral: true
-        });
-    }
-
-    const subcommand = interaction.options.getSubcommand();
-
-    // ==================================================
-    // SETUP
-    // ==================================================
-
-    if (subcommand === "setup") {
-        const channel =
-            interaction.options.getChannel("channel");
-
-        const role =
-            interaction.options.getRole("role");
-
-        const image =
-            interaction.options.getString("image");
-
-        const message =
-            interaction.options.getString("message");
-
-        // Validate image URL
-        try {
-            const url = new URL(image);
-
-            if (
-                url.protocol !== "http:" &&
-                url.protocol !== "https:"
-            ) {
-                throw new Error("Invalid protocol");
-            }
-        } catch {
-            return interaction.reply({
-                content:
-                    "❌ Please provide a valid HTTP/HTTPS image URL.",
-                ephemeral: true
-            });
-        }
-
-        // Check bot's role
-        const botMember =
-            interaction.guild.members.me;
-
-        if (!botMember) {
-            return interaction.reply({
-                content:
-                    "❌ I couldn't find my server member information.",
-                ephemeral: true
-            });
+        if (!interaction.isChatInputCommand()) {
+            return;
         }
 
         if (
-            role.position >=
-            botMember.roles.highest.position
+            interaction.commandName !==
+            "welcome"
         ) {
-            return interaction.reply({
-                content:
-                    "❌ I cannot give that role because it is above or equal to my highest role.\n\nMove my bot role **above** the welcome role in Server Settings → Roles.",
-                ephemeral: true
-            });
+            return;
         }
 
-        try {
-            await WelcomeConfig.findOneAndUpdate(
-                {
-                    guildId: interaction.guild.id
-                },
-                {
-                    guildId: interaction.guild.id,
-                    enabled: true,
-                    channelId: channel.id,
-                    roleId: role.id,
-                    image: image,
-                    message: message
-                },
-                {
-                    upsert: true,
-                    new: true
+        if (!interaction.guild) {
+
+            await interaction.reply({
+                content:
+                    "❌ This command can only be used inside a server.",
+                ephemeral: true
+            });
+
+            return;
+        }
+
+        if (
+            !interaction.memberPermissions?.has(
+                PermissionFlagsBits.ManageGuild
+            )
+        ) {
+
+            await interaction.reply({
+                content:
+                    "❌ You need **Manage Server** permission.",
+                ephemeral: true
+            });
+
+            return;
+        }
+
+        const subcommand =
+            interaction.options.getSubcommand();
+
+        // ====================================================
+        // SETUP
+        // ====================================================
+
+        if (
+            subcommand === "setup"
+        ) {
+
+            const channel =
+                interaction.options.getChannel(
+                    "channel"
+                );
+
+            const role =
+                interaction.options.getRole(
+                    "role"
+                );
+
+            const image =
+                interaction.options.getString(
+                    "image"
+                );
+
+            const message =
+                interaction.options.getString(
+                    "message"
+                );
+
+            // Validate image
+            try {
+
+                const url =
+                    new URL(image);
+
+                if (
+                    url.protocol !== "http:" &&
+                    url.protocol !== "https:"
+                ) {
+                    throw new Error(
+                        "Invalid protocol"
+                    );
                 }
-            );
 
-            const embed = new EmbedBuilder()
-                .setTitle("✅ Welcome System Enabled")
-                .setColor(0x8b0000)
-                .addFields(
-                    {
-                        name: "Channel",
-                        value: `<#${channel.id}>`,
-                        inline: true
-                    },
-                    {
-                        name: "Role",
-                        value: `<@&${role.id}>`,
-                        inline: true
-                    },
-                    {
-                        name: "Message",
-                        value: message
-                    }
-                )
-                .setTimestamp();
+            } catch {
 
-            return interaction.reply({
-                embeds: [embed],
-                ephemeral: true
-            });
-
-        } catch (error) {
-            console.error(
-                "❌ Welcome setup error:",
-                error
-            );
-
-            return interaction.reply({
-                content:
-                    "❌ Something went wrong while saving the welcome configuration.",
-                ephemeral: true
-            });
-        }
-    }
-
-    // ==================================================
-    // CONFIG
-    // ==================================================
-
-    if (subcommand === "config") {
-        try {
-            const config =
-                await WelcomeConfig.findOne({
-                    guildId: interaction.guild.id
-                });
-
-            if (!config || !config.enabled) {
-                return interaction.reply({
+                await interaction.reply({
                     content:
-                        "❌ The welcome system is currently disabled.",
+                        "❌ The image must be a valid HTTP/HTTPS URL.",
                     ephemeral: true
                 });
+
+                return;
             }
 
-            const embed = new EmbedBuilder()
-                .setTitle("⚙️ Welcome Configuration")
-                .setColor(0x8b0000)
-                .addFields(
-                    {
-                        name: "Status",
-                        value: "🟢 Enabled",
-                        inline: true
-                    },
-                    {
-                        name: "Channel",
-                        value: config.channelId
-                            ? `<#${config.channelId}>`
-                            : "Not configured",
-                        inline: true
-                    },
-                    {
-                        name: "Role",
-                        value: config.roleId
-                            ? `<@&${config.roleId}>`
-                            : "Not configured",
-                        inline: true
-                    },
-                    {
-                        name: "Message",
-                        value:
-                            config.message ||
-                            "Not configured"
-                    }
-                )
-                .setTimestamp();
+            // Check bot role
+            const botMember =
+                interaction.guild.members.me;
 
-            if (config.image) {
-                embed.setImage(config.image);
+            if (!botMember) {
+
+                await interaction.reply({
+                    content:
+                        "❌ I cannot find my bot member.",
+                    ephemeral: true
+                });
+
+                return;
             }
 
-            return interaction.reply({
-                embeds: [embed],
-                ephemeral: true
-            });
+            if (
+                role.position >=
+                botMember.roles.highest.position
+            ) {
 
-        } catch (error) {
-            console.error(
-                "❌ Welcome config error:",
-                error
-            );
+                await interaction.reply({
+                    content:
+                        "❌ My bot role must be ABOVE the welcome role.",
+                    ephemeral: true
+                });
 
-            return interaction.reply({
-                content:
-                    "❌ Could not retrieve the welcome configuration.",
-                ephemeral: true
-            });
-        }
-    }
+                return;
+            }
 
-    // ==================================================
-    // DISABLE
-    // ==================================================
+            try {
 
-    if (subcommand === "disable") {
-        try {
-            const config =
                 await WelcomeConfig.findOneAndUpdate(
                     {
-                        guildId: interaction.guild.id
+                        guildId:
+                            interaction.guild.id
                     },
                     {
-                        enabled: false
+                        guildId:
+                            interaction.guild.id,
+
+                        enabled: true,
+
+                        channelId:
+                            channel.id,
+
+                        roleId:
+                            role.id,
+
+                        image: image,
+
+                        message: message
                     },
                     {
+                        upsert: true,
                         new: true
                     }
                 );
 
-            if (!config) {
-                return interaction.reply({
+                const embed =
+                    new EmbedBuilder()
+                        .setTitle(
+                            "Welcome System Enabled"
+                        )
+                        .setColor(
+                            0x8b0000
+                        )
+                        .addFields(
+                            {
+                                name:
+                                    "Channel",
+                                value:
+                                    `<#${channel.id}>`,
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Role",
+                                value:
+                                    `<@&${role.id}>`,
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Message",
+                                value:
+                                    message
+                            }
+                        )
+                        .setTimestamp();
+
+                await interaction.reply({
+                    embeds: [
+                        embed
+                    ],
+                    ephemeral:
+                        true
+                });
+
+                console.log(
+                    `✅ Welcome system configured for ${interaction.guild.name}`
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "❌ Setup error:",
+                    error
+                );
+
+                await interaction.reply({
                     content:
-                        "❌ There is no welcome configuration for this server.",
-                    ephemeral: true
+                        "❌ Failed to save welcome settings.",
+                    ephemeral:
+                        true
                 });
             }
 
-            return interaction.reply({
-                content:
-                    "✅ The welcome system has been disabled.",
-                ephemeral: true
-            });
-
-        } catch (error) {
-            console.error(
-                "❌ Welcome disable error:",
-                error
-            );
-
-            return interaction.reply({
-                content:
-                    "❌ Could not disable the welcome system.",
-                ephemeral: true
-            });
-        }
-    }
-});
-
-// ======================================================
-// NEW MEMBER
-// ======================================================
-
-client.on("guildMemberAdd", async member => {
-    try {
-        console.log(
-            `👤 New member: ${member.user.tag} joined ${member.guild.name}`
-        );
-
-        const config =
-            await WelcomeConfig.findOne({
-                guildId: member.guild.id,
-                enabled: true
-            });
-
-        if (!config) {
-            console.log(
-                `ℹ️ No welcome configuration for ${member.guild.name}`
-            );
             return;
         }
 
-        // ==============================================
-        // GIVE ROLE
-        // ==============================================
+        // ====================================================
+        // CONFIG
+        // ====================================================
 
-        if (config.roleId) {
+        if (
+            subcommand === "config"
+        ) {
+
             try {
-                const role =
-                    member.guild.roles.cache.get(
-                        config.roleId
-                    );
 
-                if (role) {
-                    await member.roles.add(role);
+                const config =
+                    await WelcomeConfig.findOne({
+                        guildId:
+                            interaction.guild.id
+                    });
 
-                    console.log(
-                        `✅ Gave ${role.name} to ${member.user.tag}`
-                    );
-                } else {
-                    console.log(
-                        "⚠️ Welcome role no longer exists."
+                if (
+                    !config ||
+                    !config.enabled
+                ) {
+
+                    await interaction.reply({
+                        content:
+                            "❌ Welcome system is disabled.",
+                        ephemeral:
+                            true
+                    });
+
+                    return;
+                }
+
+                const embed =
+                    new EmbedBuilder()
+                        .setTitle(
+                            "Welcome Configuration"
+                        )
+                        .setColor(
+                            0x8b0000
+                        )
+                        .addFields(
+                            {
+                                name:
+                                    "Status",
+                                value:
+                                    "🟢 Enabled",
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Channel",
+                                value:
+                                    `<#${config.channelId}>`,
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Role",
+                                value:
+                                    `<@&${config.roleId}>`,
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Message",
+                                value:
+                                    config.message
+                            }
+                        );
+
+                if (config.image) {
+                    embed.setImage(
+                        config.image
                     );
                 }
 
-            } catch (roleError) {
+                await interaction.reply({
+                    embeds: [
+                        embed
+                    ],
+                    ephemeral:
+                        true
+                });
+
+            } catch (error) {
+
                 console.error(
-                    "❌ Could not give welcome role:",
-                    roleError
+                    "❌ Config error:",
+                    error
                 );
+
+                await interaction.reply({
+                    content:
+                        "❌ Failed to load configuration.",
+                    ephemeral:
+                        true
+                });
             }
-        }
 
-        // ==============================================
-        // WELCOME CHANNEL
-        // ==============================================
-
-        const channel =
-            member.guild.channels.cache.get(
-                config.channelId
-            );
-
-        if (!channel) {
-            console.log(
-                "⚠️ Welcome channel no longer exists."
-            );
             return;
         }
 
-        // ==============================================
-        // MESSAGE VARIABLES
-        // ==============================================
+        // ====================================================
+        // DISABLE
+        // ====================================================
 
-        let welcomeMessage =
-            config.message ||
-            "Welcome {user} to {server}!";
+        if (
+            subcommand === "disable"
+        ) {
 
-        welcomeMessage =
-            welcomeMessage
-                .replace(
-                    /{user}/g,
-                    `<@${member.id}>`
-                )
-                .replace(
-                    /{username}/g,
-                    member.user.username
-                )
-                .replace(
-                    /{server}/g,
-                    member.guild.name
+            try {
+
+                const config =
+                    await WelcomeConfig.findOneAndUpdate(
+                        {
+                            guildId:
+                                interaction.guild.id
+                        },
+                        {
+                            enabled:
+                                false
+                        },
+                        {
+                            new:
+                                true
+                        }
+                    );
+
+                if (!config) {
+
+                    await interaction.reply({
+                        content:
+                            "❌ No welcome configuration exists.",
+                        ephemeral:
+                            true
+                    });
+
+                    return;
+                }
+
+                await interaction.reply({
+                    content:
+                        "✅ Welcome system disabled.",
+                    ephemeral:
+                        true
+                });
+
+            } catch (error) {
+
+                console.error(
+                    "❌ Disable error:",
+                    error
                 );
 
-        // ==============================================
-        // EMBED
-        // ==============================================
-
-        const embed = new EmbedBuilder()
-            .setTitle("Welcome")
-            .setDescription(welcomeMessage)
-            .setColor(0x8b0000)
-            .setThumbnail(
-                member.user.displayAvatarURL({
-                    dynamic: true,
-                    size: 256
-                })
-            )
-            .setFooter({
-                text: member.guild.name
-            })
-            .setTimestamp();
-
-        if (config.image) {
-            embed.setImage(config.image);
+                await interaction.reply({
+                    content:
+                        "❌ Failed to disable welcome system.",
+                    ephemeral:
+                        true
+                });
+            }
         }
+    }
+);
 
-        // ==============================================
-        // SEND
-        // ==============================================
+// ============================================================
+// MEMBER JOIN
+// ============================================================
 
-        await channel.send({
-            content: `<@${member.id}>`,
-            embeds: [embed]
-        });
+client.on(
+    "guildMemberAdd",
+    async member => {
 
         console.log(
-            `✅ Welcome message sent for ${member.user.tag}`
+            `👤 ${member.user.tag} joined ${member.guild.name}`
         );
 
-    } catch (error) {
+        try {
+
+            const config =
+                await WelcomeConfig.findOne({
+                    guildId:
+                        member.guild.id,
+
+                    enabled:
+                        true
+                });
+
+            if (!config) {
+
+                console.log(
+                    "ℹ️ Welcome system is not configured."
+                );
+
+                return;
+            }
+
+            // =================================================
+            // ROLE
+            // =================================================
+
+            if (config.roleId) {
+
+                try {
+
+                    const role =
+                        member.guild.roles.cache.get(
+                            config.roleId
+                        );
+
+                    if (!role) {
+
+                        console.log(
+                            "⚠️ Welcome role not found."
+                        );
+
+                    } else {
+
+                        await member.roles.add(
+                            role
+                        );
+
+                        console.log(
+                            `✅ Role "${role.name}" given to ${member.user.tag}`
+                        );
+                    }
+
+                } catch (error) {
+
+                    console.error(
+                        "❌ Role assignment failed:",
+                        error.message
+                    );
+                }
+            }
+
+            // =================================================
+            // CHANNEL
+            // =================================================
+
+            const channel =
+                member.guild.channels.cache.get(
+                    config.channelId
+                );
+
+            if (!channel) {
+
+                console.log(
+                    "⚠️ Welcome channel not found."
+                );
+
+                return;
+            }
+
+            // =================================================
+            // MESSAGE
+            // =================================================
+
+            let message =
+                config.message ||
+                "Welcome {user} to {server}!";
+
+            message =
+                message
+                    .replace(
+                        /{user}/g,
+                        `<@${member.id}>`
+                    )
+                    .replace(
+                        /{username}/g,
+                        member.user.username
+                    )
+                    .replace(
+                        /{server}/g,
+                        member.guild.name
+                    );
+
+            // =================================================
+            // EMBED
+            // =================================================
+
+            const embed =
+                new EmbedBuilder()
+                    .setTitle(
+                        "Welcome!"
+                    )
+                    .setDescription(
+                        message
+                    )
+                    .setColor(
+                        0x8b0000
+                    )
+                    .setThumbnail(
+                        member.user.displayAvatarURL({
+                            size: 256
+                        })
+                    )
+                    .setFooter({
+                        text:
+                            member.guild.name
+                    })
+                    .setTimestamp();
+
+            if (config.image) {
+
+                embed.setImage(
+                    config.image
+                );
+            }
+
+            // =================================================
+            // SEND
+            // =================================================
+
+            await channel.send({
+                content:
+                    `<@${member.id}>`,
+                embeds: [
+                    embed
+                ]
+            });
+
+            console.log(
+                `✅ Welcome message sent for ${member.user.tag}`
+            );
+
+        } catch (error) {
+
+            console.error(
+                "❌ Member welcome error:",
+                error
+            );
+        }
+    }
+);
+
+// ============================================================
+// DISCORD ERROR HANDLING
+// ============================================================
+
+client.on(
+    "error",
+    error => {
+
         console.error(
-            "❌ Welcome system error:",
+            "❌ Discord client error:",
             error
         );
     }
-});
+);
 
-// ======================================================
-// MONGODB CONNECTION
-// ======================================================
+client.on(
+    "shardError",
+    error => {
 
-async function connectDatabase() {
-    if (!MONGODB_URI) {
         console.error(
-            "❌ MONGODB_URI is missing. Database disabled."
+            "❌ Discord WebSocket error:",
+            error
         );
+    }
+);
+
+// ============================================================
+// LOGIN
+// ============================================================
+
+async function startDiscord() {
+
+    if (!TOKEN) {
+
+        console.error(
+            "❌ TOKEN is missing."
+        );
+
         return;
     }
 
     try {
-        await mongoose.connect(MONGODB_URI);
 
-        console.log("🗄️ MongoDB connected successfully.");
+        console.log(
+            "🔌 Connecting to Discord..."
+        );
+
+        await client.login(
+            TOKEN
+        );
 
     } catch (error) {
+
         console.error(
-            "❌ MongoDB connection failed:",
-            error
+            "❌ Discord login failed:"
+        );
+
+        console.error(
+            error.message
         );
     }
 }
 
-// ======================================================
-// START DISCORD BOT
-// ======================================================
-
-async function startBot() {
-    try {
-        await connectDatabase();
-
-        await registerCommands();
-
-        if (!TOKEN) {
-            console.error(
-                "❌ TOKEN is missing. Discord bot cannot start."
-            );
-            return;
-        }
-
-        await client.login(TOKEN);
-
-    } catch (error) {
-        console.error(
-            "❌ Bot startup error:",
-            error
-        );
-    }
-}
-
-// ======================================================
+// ============================================================
 // START
-// ======================================================
+// ============================================================
 
-startBot();
+startDiscord();
