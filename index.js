@@ -3891,140 +3891,30 @@ process.on("uncaughtException", error => {
 });
 
 // ============================================================
-// GRACEFUL SHUTDOWN
+// HOSTINGER PROCESS SIGNALS
 // 27Pro • © 2026 iik27
 // ============================================================
 
-let shuttingDown = false;
+process.on("SIGTERM", () => {
 
-async function gracefulShutdown(signal) {
+    console.warn("");
+    console.warn("==========================================");
+    console.warn("⚠️ SIGTERM RECEIVED");
+    console.warn("⚠️ Hostinger is stopping/restarting 27Pro.");
+    console.warn("==========================================");
+    console.warn("");
 
-    if (shuttingDown) {
-        return;
-    }
-
-    shuttingDown = true;
-
-    console.log("");
-    console.log("==========================================");
-    console.log(`🛑 ${signal} received`);
-    console.log("🛑 Shutting down 27Pro cleanly...");
-    console.log("==========================================");
-
-    // --------------------------------------------------------
-    // CLOSE HTTP SERVER
-    // --------------------------------------------------------
-
-    try {
-
-        if (typeof server !== "undefined" && server) {
-
-            await new Promise(resolve => {
-
-                let finished = false;
-
-                const finish = () => {
-
-                    if (finished) return;
-
-                    finished = true;
-                    resolve();
-                };
-
-                server.close(() => {
-
-                    console.log(
-                        "🌐 HTTP server closed."
-                    );
-
-                    finish();
-                });
-
-                // Don't wait forever
-                setTimeout(() => {
-
-                    console.log(
-                        "⚠️ HTTP server close timeout."
-                    );
-
-                    finish();
-
-                }, 5000);
-            });
-        }
-
-    } catch (error) {
-
-        console.error(
-            "❌ HTTP server shutdown error:",
-            error
-        );
-    }
-
-    // --------------------------------------------------------
-    // CLOSE DISCORD
-    // --------------------------------------------------------
-
-    try {
-
-        if (client) {
-
-            client.destroy();
-
-            console.log(
-                "🤖 Discord client closed."
-            );
-        }
-
-    } catch (error) {
-
-        console.error(
-            "❌ Discord shutdown error:",
-            error
-        );
-    }
-
-    // --------------------------------------------------------
-    // CLOSE MONGODB
-    // --------------------------------------------------------
-
-    try {
-
-        if (
-            mongoose.connection &&
-            mongoose.connection.readyState !== 0
-        ) {
-
-            await mongoose.connection.close();
-
-            console.log(
-                "🍃 MongoDB connection closed."
-            );
-        }
-
-    } catch (error) {
-
-        console.error(
-            "❌ MongoDB shutdown error:",
-            error
-        );
-    }
-
-    console.log("");
-    console.log(
-        "✅ 27Pro shutdown complete."
-    );
-
-    // Let Hostinger restart the application
-    process.exit(0);
-}
-
-process.once("SIGTERM", () => {
-    gracefulShutdown("SIGTERM");
 });
 
-process.once("SIGINT", () => {
-    gracefulShutdown("SIGINT");
+process.on("SIGINT", () => {
+
+    console.warn("");
+    console.warn("==========================================");
+    console.warn("⚠️ SIGINT RECEIVED");
+    console.warn("⚠️ 27Pro received an interrupt signal.");
+    console.warn("==========================================");
+    console.warn("");
+
 });
 
 // ======================================================
