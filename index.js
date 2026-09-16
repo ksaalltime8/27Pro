@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const http = require("http");
 const mongoose = require("mongoose");
+
 const {
     Client,
     GatewayIntentBits,
@@ -14,90 +15,14 @@ const {
 } = require("discord.js");
 
 // ============================================================
-// CONFIG
+// ENV
 // ============================================================
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const MONGODB_URI = process.env.MONGODB_URI;
-
 const PORT = Number(process.env.PORT) || 5000;
-
-// ============================================================
-// START HOSTINGER HTTP SERVER FIRST
-// ============================================================
-
-const httpServer = http.createServer((req, res) => {
-
-    // Health check
-    if (req.url === "/" || req.url === "/api/health") {
-
-        const response = {
-            status: "online",
-            bot: client?.isReady() ? "online" : "starting",
-            database:
-                mongoose.connection.readyState === 1
-                    ? "connected"
-                    : "disconnected",
-            timestamp: new Date().toISOString()
-        };
-
-        res.writeHead(200, {
-            "Content-Type": "application/json"
-        });
-
-        res.end(JSON.stringify(response, null, 2));
-
-        return;
-    }
-
-    res.writeHead(404, {
-        "Content-Type": "application/json"
-    });
-
-    res.end(JSON.stringify({
-        error: "Not found"
-    }));
-});
-
-httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log("======================================");
-    console.log(`🌐 Hostinger server running on port ${PORT}`);
-    console.log("======================================");
-});
-
-httpServer.on("error", error => {
-    console.error("❌ HTTP server error:", error);
-});
-
-// ============================================================
-// CHECK ENVIRONMENT
-// ============================================================
-
-console.log("======================================");
-console.log("🚀 K7Devs Discord Bot Starting...");
-console.log("======================================");
-
-console.log(
-    `TOKEN: ${TOKEN ? "FOUND" : "MISSING"}`
-);
-
-console.log(
-    `CLIENT_ID: ${CLIENT_ID ? "FOUND" : "MISSING"}`
-);
-
-console.log(
-    `GUILD_ID: ${GUILD_ID ? "FOUND" : "MISSING"}`
-);
-
-console.log(
-    `MONGODB_URI: ${MONGODB_URI ? "FOUND" : "MISSING"}`
-);
-
-console.log(
-    `PORT: ${PORT}`
-);
 
 // ============================================================
 // DISCORD CLIENT
@@ -111,46 +36,86 @@ const client = new Client({
 });
 
 // ============================================================
-// DATABASE
+// HOSTINGER HTTP SERVER
 // ============================================================
 
-const WelcomeConfigSchema = new mongoose.Schema(
-    {
-        guildId: {
-            type: String,
-            required: true,
-            unique: true
-        },
+const server = http.createServer((req, res) => {
 
-        enabled: {
-            type: Boolean,
-            default: false
-        },
+    res.setHeader("Content-Type", "application/json");
 
-        channelId: {
-            type: String,
-            default: null
-        },
+    if (req.url === "/" || req.url === "/api/health") {
 
-        roleId: {
-            type: String,
-            default: null
-        },
+        res.writeHead(200);
 
-        image: {
-            type: String,
-            default: null
-        },
+        res.end(JSON.stringify({
+            status: "online",
+            bot: client.isReady()
+                ? "online"
+                : "starting",
+            database:
+                mongoose.connection.readyState === 1
+                    ? "connected"
+                    : "disconnected"
+        }));
 
-        message: {
-            type: String,
-            default: "Welcome {user} to {server}!"
-        }
-    },
-    {
-        timestamps: true
+        return;
     }
-);
+
+    res.writeHead(404);
+
+    res.end(JSON.stringify({
+        error: "Not found"
+    }));
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+
+    console.log(
+        `🌐 Hostinger server listening on port ${PORT}`
+    );
+
+});
+
+// ============================================================
+// DATABASE SCHEMA
+// ============================================================
+
+const WelcomeConfigSchema = new mongoose.Schema({
+
+    guildId: {
+        type: String,
+        required: true,
+        unique: true
+    },
+
+    enabled: {
+        type: Boolean,
+        default: false
+    },
+
+    channelId: {
+        type: String,
+        default: null
+    },
+
+    roleId: {
+        type: String,
+        default: null
+    },
+
+    image: {
+        type: String,
+        default: null
+    },
+
+    message: {
+        type: String,
+        default: "Welcome {user} to {server}!"
+    }
+
+}, {
+    timestamps: true
+});
 
 const WelcomeConfig =
     mongoose.models.WelcomeConfig ||
@@ -160,28 +125,32 @@ const WelcomeConfig =
     );
 
 // ============================================================
-// MONGODB
+// CONNECT DATABASE
 // ============================================================
 
-async function connectMongoDB() {
+async function connectDatabase() {
 
     if (!MONGODB_URI) {
-        console.log(
-            "⚠️ MONGODB_URI is missing."
+
+        console.error(
+            "❌ MONGODB_URI is missing."
         );
 
-        return false;
+        return;
     }
 
     try {
 
-        await mongoose.connect(MONGODB_URI);
+        await mongoose.connect(
+            MONGODB_URI,
+            {
+                serverSelectionTimeoutMS: 10000
+            }
+        );
 
         console.log(
             "✅ MongoDB connected."
         );
-
-        return true;
 
     } catch (error) {
 
@@ -189,9 +158,9 @@ async function connectMongoDB() {
             "❌ MongoDB connection failed:"
         );
 
-        console.error(error.message);
-
-        return false;
+        console.error(
+            error.message
+        );
     }
 }
 
@@ -202,14 +171,16 @@ async function connectMongoDB() {
 const welcomeCommand =
     new SlashCommandBuilder()
         .setName("welcome")
-        .setDescription("Configure the welcome system")
+        .setDescription(
+            "Configure the server welcome system"
+        )
 
         // SETUP
         .addSubcommand(subcommand =>
             subcommand
                 .setName("setup")
                 .setDescription(
-                    "Configure the welcome system"
+                    "Setup the welcome system"
                 )
 
                 .addChannelOption(option =>
@@ -228,7 +199,7 @@ const welcomeCommand =
                     option
                         .setName("role")
                         .setDescription(
-                            "Role to give new members"
+                            "Role given to new members"
                         )
                         .setRequired(true)
                 )
@@ -257,7 +228,7 @@ const welcomeCommand =
             subcommand
                 .setName("config")
                 .setDescription(
-                    "View welcome configuration"
+                    "View welcome settings"
                 )
         )
 
@@ -268,6 +239,10 @@ const welcomeCommand =
                 .setDescription(
                     "Disable welcome messages"
                 )
+        )
+
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageGuild
         );
 
 // ============================================================
@@ -276,28 +251,25 @@ const welcomeCommand =
 
 async function registerCommands() {
 
-    if (!TOKEN) {
-        console.log(
-            "❌ Cannot register commands: TOKEN missing."
-        );
-        return;
-    }
-
-    if (!CLIENT_ID) {
-        console.log(
-            "❌ Cannot register commands: CLIENT_ID missing."
-        );
-        return;
-    }
-
-    if (!GUILD_ID) {
-        console.log(
-            "❌ Cannot register commands: GUILD_ID missing."
-        );
-        return;
-    }
-
     try {
+
+        if (!TOKEN) {
+            throw new Error(
+                "TOKEN is missing"
+            );
+        }
+
+        if (!CLIENT_ID) {
+            throw new Error(
+                "CLIENT_ID is missing"
+            );
+        }
+
+        if (!GUILD_ID) {
+            throw new Error(
+                "GUILD_ID is missing"
+            );
+        }
 
         const rest =
             new REST({
@@ -317,16 +289,18 @@ async function registerCommands() {
         );
 
         console.log(
-            "✅ /welcome command registered."
+            "✅ /welcome registered successfully."
         );
 
     } catch (error) {
 
         console.error(
-            "❌ Slash command registration failed:"
+            "❌ Command registration failed:"
         );
 
-        console.error(error.message);
+        console.error(
+            error.message
+        );
     }
 }
 
@@ -336,14 +310,16 @@ async function registerCommands() {
 
 client.once("ready", async () => {
 
-    console.log("======================================");
-
     console.log(
-        `🤖 Discord connected as ${client.user.tag}`
+        "======================================"
     );
 
     console.log(
-        `🏠 Servers: ${client.guilds.cache.size}`
+        `🤖 BOT ONLINE: ${client.user.tag}`
+    );
+
+    console.log(
+        `🏠 SERVERS: ${client.guilds.cache.size}`
     );
 
     console.log(
@@ -351,10 +327,11 @@ client.once("ready", async () => {
     );
 
     await registerCommands();
+
 });
 
 // ============================================================
-// WELCOME COMMAND
+// INTERACTIONS
 // ============================================================
 
 client.on(
@@ -366,22 +343,48 @@ client.on(
         }
 
         if (
-            interaction.commandName !==
-            "welcome"
+            interaction.commandName !== "welcome"
         ) {
             return;
         }
 
+        // ====================================================
+        // ACKNOWLEDGE DISCORD IMMEDIATELY
+        // ====================================================
+
+        try {
+
+            await interaction.deferReply({
+                ephemeral: true
+            });
+
+        } catch (error) {
+
+            console.error(
+                "❌ Could not acknowledge interaction:",
+                error.message
+            );
+
+            return;
+        }
+
+        // ====================================================
+        // SERVER CHECK
+        // ====================================================
+
         if (!interaction.guild) {
 
-            await interaction.reply({
+            await interaction.editReply({
                 content:
-                    "❌ This command can only be used inside a server.",
-                ephemeral: true
+                    "❌ This command can only be used inside a server."
             });
 
             return;
         }
+
+        // ====================================================
+        // PERMISSION CHECK
+        // ====================================================
 
         if (
             !interaction.memberPermissions?.has(
@@ -389,10 +392,9 @@ client.on(
             )
         ) {
 
-            await interaction.reply({
+            await interaction.editReply({
                 content:
-                    "❌ You need **Manage Server** permission.",
-                ephemeral: true
+                    "❌ You need the **Manage Server** permission."
             });
 
             return;
@@ -429,7 +431,10 @@ client.on(
                     "message"
                 );
 
-            // Validate image
+            // ------------------------------------------------
+            // IMAGE VALIDATION
+            // ------------------------------------------------
+
             try {
 
                 const url =
@@ -446,25 +451,26 @@ client.on(
 
             } catch {
 
-                await interaction.reply({
+                await interaction.editReply({
                     content:
-                        "❌ The image must be a valid HTTP/HTTPS URL.",
-                    ephemeral: true
+                        "❌ Please provide a valid HTTP/HTTPS image URL."
                 });
 
                 return;
             }
 
-            // Check bot role
+            // ------------------------------------------------
+            // BOT ROLE CHECK
+            // ------------------------------------------------
+
             const botMember =
                 interaction.guild.members.me;
 
             if (!botMember) {
 
-                await interaction.reply({
+                await interaction.editReply({
                     content:
-                        "❌ I cannot find my bot member.",
-                    ephemeral: true
+                        "❌ I couldn't find my bot member in this server."
                 });
 
                 return;
@@ -475,27 +481,33 @@ client.on(
                 botMember.roles.highest.position
             ) {
 
-                await interaction.reply({
+                await interaction.editReply({
                     content:
-                        "❌ My bot role must be ABOVE the welcome role.",
-                    ephemeral: true
+                        "❌ My bot role must be ABOVE the welcome role."
                 });
 
                 return;
             }
 
+            // ------------------------------------------------
+            // SAVE
+            // ------------------------------------------------
+
             try {
 
                 await WelcomeConfig.findOneAndUpdate(
+
                     {
                         guildId:
                             interaction.guild.id
                     },
+
                     {
                         guildId:
                             interaction.guild.id,
 
-                        enabled: true,
+                        enabled:
+                            true,
 
                         channelId:
                             channel.id,
@@ -503,13 +515,19 @@ client.on(
                         roleId:
                             role.id,
 
-                        image: image,
+                        image:
+                            image,
 
-                        message: message
+                        message:
+                            message
                     },
+
                     {
-                        upsert: true,
-                        new: true
+                        upsert:
+                            true,
+
+                        new:
+                            true
                     }
                 );
 
@@ -525,52 +543,53 @@ client.on(
                             {
                                 name:
                                     "Channel",
+
                                 value:
                                     `<#${channel.id}>`,
+
                                 inline:
                                     true
                             },
                             {
                                 name:
                                     "Role",
+
                                 value:
                                     `<@&${role.id}>`,
+
                                 inline:
                                     true
                             },
                             {
                                 name:
                                     "Message",
+
                                 value:
                                     message
                             }
                         )
                         .setTimestamp();
 
-                await interaction.reply({
+                await interaction.editReply({
                     embeds: [
                         embed
-                    ],
-                    ephemeral:
-                        true
+                    ]
                 });
 
                 console.log(
-                    `✅ Welcome system configured for ${interaction.guild.name}`
+                    "✅ Welcome system configured."
                 );
 
             } catch (error) {
 
                 console.error(
-                    "❌ Setup error:",
+                    "❌ Welcome setup error:",
                     error
                 );
 
-                await interaction.reply({
+                await interaction.editReply({
                     content:
-                        "❌ Failed to save welcome settings.",
-                    ephemeral:
-                        true
+                        "❌ Database error while saving the welcome configuration."
                 });
             }
 
@@ -598,11 +617,9 @@ client.on(
                     !config.enabled
                 ) {
 
-                    await interaction.reply({
+                    await interaction.editReply({
                         content:
-                            "❌ Welcome system is disabled.",
-                        ephemeral:
-                            true
+                            "❌ Welcome system is currently disabled."
                     });
 
                     return;
@@ -620,47 +637,56 @@ client.on(
                             {
                                 name:
                                     "Status",
+
                                 value:
                                     "🟢 Enabled",
+
                                 inline:
                                     true
                             },
                             {
                                 name:
                                     "Channel",
+
                                 value:
                                     `<#${config.channelId}>`,
+
                                 inline:
                                     true
                             },
                             {
                                 name:
                                     "Role",
+
                                 value:
                                     `<@&${config.roleId}>`,
+
                                 inline:
                                     true
                             },
                             {
                                 name:
                                     "Message",
+
                                 value:
-                                    config.message
+                                    config.message ||
+                                    "Not configured"
                             }
                         );
 
-                if (config.image) {
+                if (
+                    config.image
+                ) {
+
                     embed.setImage(
                         config.image
                     );
                 }
 
-                await interaction.reply({
+                await interaction.editReply({
                     embeds: [
                         embed
-                    ],
-                    ephemeral:
-                        true
+                    ]
                 });
 
             } catch (error) {
@@ -670,11 +696,9 @@ client.on(
                     error
                 );
 
-                await interaction.reply({
+                await interaction.editReply({
                     content:
-                        "❌ Failed to load configuration.",
-                    ephemeral:
-                        true
+                        "❌ Failed to load the welcome configuration."
                 });
             }
 
@@ -693,14 +717,17 @@ client.on(
 
                 const config =
                     await WelcomeConfig.findOneAndUpdate(
+
                         {
                             guildId:
                                 interaction.guild.id
                         },
+
                         {
                             enabled:
                                 false
                         },
+
                         {
                             new:
                                 true
@@ -709,21 +736,17 @@ client.on(
 
                 if (!config) {
 
-                    await interaction.reply({
+                    await interaction.editReply({
                         content:
-                            "❌ No welcome configuration exists.",
-                        ephemeral:
-                            true
+                            "❌ No welcome configuration exists for this server."
                     });
 
                     return;
                 }
 
-                await interaction.reply({
+                await interaction.editReply({
                     content:
-                        "✅ Welcome system disabled.",
-                    ephemeral:
-                        true
+                        "✅ Welcome system disabled."
                 });
 
             } catch (error) {
@@ -733,11 +756,9 @@ client.on(
                     error
                 );
 
-                await interaction.reply({
+                await interaction.editReply({
                     content:
-                        "❌ Failed to disable welcome system.",
-                    ephemeral:
-                        true
+                        "❌ Failed to disable the welcome system."
                 });
             }
         }
@@ -753,7 +774,7 @@ client.on(
     async member => {
 
         console.log(
-            `👤 ${member.user.tag} joined ${member.guild.name}`
+            `👤 MEMBER JOINED: ${member.user.tag}`
         );
 
         try {
@@ -770,7 +791,7 @@ client.on(
             if (!config) {
 
                 console.log(
-                    "ℹ️ Welcome system is not configured."
+                    "ℹ️ Welcome system is not configured for this server."
                 );
 
                 return;
@@ -780,7 +801,9 @@ client.on(
             // ROLE
             // =================================================
 
-            if (config.roleId) {
+            if (
+                config.roleId
+            ) {
 
                 try {
 
@@ -802,14 +825,14 @@ client.on(
                         );
 
                         console.log(
-                            `✅ Role "${role.name}" given to ${member.user.tag}`
+                            `✅ ROLE GIVEN: ${role.name}`
                         );
                     }
 
                 } catch (error) {
 
                     console.error(
-                        "❌ Role assignment failed:",
+                        "❌ Failed to give role:",
                         error.message
                     );
                 }
@@ -834,7 +857,7 @@ client.on(
             }
 
             // =================================================
-            // MESSAGE
+            // MESSAGE VARIABLES
             // =================================================
 
             let message =
@@ -843,16 +866,16 @@ client.on(
 
             message =
                 message
-                    .replace(
-                        /{user}/g,
+                    .replaceAll(
+                        "{user}",
                         `<@${member.id}>`
                     )
-                    .replace(
-                        /{username}/g,
+                    .replaceAll(
+                        "{username}",
                         member.user.username
                     )
-                    .replace(
-                        /{server}/g,
+                    .replaceAll(
+                        "{server}",
                         member.guild.name
                     );
 
@@ -882,7 +905,9 @@ client.on(
                     })
                     .setTimestamp();
 
-            if (config.image) {
+            if (
+                config.image
+            ) {
 
                 embed.setImage(
                     config.image
@@ -902,13 +927,13 @@ client.on(
             });
 
             console.log(
-                `✅ Welcome message sent for ${member.user.tag}`
+                "✅ WELCOME MESSAGE SENT"
             );
 
         } catch (error) {
 
             console.error(
-                "❌ Member welcome error:",
+                "❌ Welcome error:",
                 error
             );
         }
@@ -916,7 +941,7 @@ client.on(
 );
 
 // ============================================================
-// DISCORD ERROR HANDLING
+// DISCORD ERRORS
 // ============================================================
 
 client.on(
@@ -924,7 +949,7 @@ client.on(
     error => {
 
         console.error(
-            "❌ Discord client error:",
+            "❌ Discord error:",
             error
         );
     }
@@ -945,22 +970,22 @@ client.on(
 // LOGIN
 // ============================================================
 
-async function startDiscord() {
+async function startBot() {
+
+    console.log(
+        "🔌 Connecting to Discord..."
+    );
 
     if (!TOKEN) {
 
         console.error(
-            "❌ TOKEN is missing."
+            "❌ TOKEN is missing from Hostinger environment variables."
         );
 
         return;
     }
 
     try {
-
-        console.log(
-            "🔌 Connecting to Discord..."
-        );
 
         await client.login(
             TOKEN
@@ -982,4 +1007,6 @@ async function startDiscord() {
 // START
 // ============================================================
 
-startDiscord();
+connectDatabase();
+
+startBot();
