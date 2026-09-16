@@ -3517,15 +3517,14 @@ if (command === "announce") {
             value: `${interaction.user}`
         });
 
-    // Send the announcement FIRST.
     await channel.send({
+        content: "@everyone",
         embeds: [embed],
         allowedMentions: {
-            parse: []
+            parse: ["everyone"]
         }
     });
 
-    // Then acknowledge the slash command ONCE.
     await interaction.reply({
         content: `✅ Announcement sent to ${channel}.`,
         flags: MessageFlags.Ephemeral
@@ -3533,7 +3532,6 @@ if (command === "announce") {
 
     return;
 }
-
         // ==================================================
         // POLL
         // ==================================================
