@@ -1,20 +1,5 @@
 // ============================================================
-// 27PRO — ALL-IN-ONE DISCORD BOT
-// ============================================================
-// Features:
-// 👋 Welcome system
-// 🛡️ Moderation
-// ⚙️ Server information
-// 🔧 Utility commands
-// 🎭 Role management
-// 🎲 Fun commands
-// 🗄️ MongoDB persistence
-// 🌐 Hostinger health server
-//
-// IMPORTANT:
-// - Keep your real TOKEN and MONGODB_URI private.
-// - Enable Server Members Intent in Discord Developer Portal.
-// - Put the 27Pro bot role ABOVE roles it needs to manage.
+// 27PRO DISCORD BOT
 // ============================================================
 
 require("dotenv").config();
@@ -41,7 +26,6 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const MONGODB_URI = process.env.MONGODB_URI;
-
 const PORT = process.env.PORT || 5000;
 
 const BOT_NAME = "27Pro";
@@ -51,11 +35,11 @@ const DEFAULT_WELCOME_MESSAGE =
     "Welcome {user} to **{server}**! You are member #{count}. Enjoy your stay!";
 
 // ============================================================
-// ENV CHECK
+// STARTUP CHECK
 // ============================================================
 
 console.log("==========================================");
-console.log("          27PRO STARTUP CHECK");
+console.log("             27PRO STARTUP");
 console.log("==========================================");
 
 console.log("TOKEN:", TOKEN ? "FOUND" : "MISSING");
@@ -68,20 +52,16 @@ if (!TOKEN) {
     console.error("❌ TOKEN is missing.");
 }
 
-if (!CLIENT_ID) {
-    console.warn("⚠️ CLIENT_ID is missing. The bot will use client.user.id.");
-}
-
 if (!GUILD_ID) {
     console.error("❌ GUILD_ID is missing.");
 }
 
 if (!MONGODB_URI) {
-    console.warn("⚠️ MONGODB_URI is missing. MongoDB features will be disabled.");
+    console.warn("⚠️ MONGODB_URI is missing. MongoDB disabled.");
 }
 
 // ============================================================
-// HOSTINGER HTTP SERVER
+// HOSTINGER SERVER
 // ============================================================
 
 const server = http.createServer((req, res) => {
@@ -117,7 +97,47 @@ const client = new Client({
 });
 
 // ============================================================
-// MONGODB SCHEMAS
+// DISCORD DEBUG EVENTS
+// ============================================================
+
+client.on("debug", message => {
+    console.log(`🐛 DISCORD DEBUG: ${message}`);
+});
+
+client.on("error", error => {
+    console.error("❌ DISCORD ERROR:");
+    console.error(error);
+});
+
+client.on("warn", warning => {
+    console.warn("⚠️ DISCORD WARNING:");
+    console.warn(warning);
+});
+
+client.on("shardError", error => {
+    console.error("❌ DISCORD SHARD ERROR:");
+    console.error(error);
+});
+
+client.on("shardReady", id => {
+    console.log(`✅ DISCORD SHARD ${id} READY`);
+});
+
+client.on("shardDisconnect", (event, id) => {
+    console.warn(
+        `⚠️ DISCORD SHARD ${id} DISCONNECTED`,
+        event
+    );
+});
+
+client.on("shardReconnecting", id => {
+    console.warn(
+        `🔄 DISCORD SHARD ${id} RECONNECTING`
+    );
+});
+
+// ============================================================
+// DATABASE SCHEMAS
 // ============================================================
 
 const welcomeSchema = new mongoose.Schema(
@@ -198,38 +218,57 @@ const guildSettingsSchema = new mongoose.Schema(
     }
 );
 
-const WelcomeConfig = mongoose.model(
-    "WelcomeConfig",
-    welcomeSchema
-);
+const WelcomeConfig =
+    mongoose.model(
+        "WelcomeConfig",
+        welcomeSchema
+    );
 
-const Warning = mongoose.model(
-    "Warning",
-    warningSchema
-);
+const Warning =
+    mongoose.model(
+        "Warning",
+        warningSchema
+    );
 
-const GuildSettings = mongoose.model(
-    "GuildSettings",
-    guildSettingsSchema
-);
+const GuildSettings =
+    mongoose.model(
+        "GuildSettings",
+        guildSettingsSchema
+    );
 
 // ============================================================
 // DATABASE
 // ============================================================
 
 async function connectDatabase() {
+
     if (!MONGODB_URI) {
-        console.warn("⚠️ MongoDB disabled.");
+        console.warn(
+            "⚠️ MongoDB disabled."
+        );
+
         return;
     }
 
     try {
-        await mongoose.connect(MONGODB_URI);
 
-        console.log("✅ MongoDB connected.");
+        await mongoose.connect(
+            MONGODB_URI
+        );
+
+        console.log(
+            "✅ MongoDB connected."
+        );
+
     } catch (error) {
-        console.error("❌ MongoDB connection failed:");
-        console.error(error.message);
+
+        console.error(
+            "❌ MongoDB connection failed:"
+        );
+
+        console.error(
+            error.message
+        );
     }
 }
 
@@ -238,23 +277,41 @@ async function connectDatabase() {
 // ============================================================
 
 function replaceVariables(message, member) {
+
     if (!message) {
         return DEFAULT_WELCOME_MESSAGE;
     }
 
     return message
-        .replaceAll("{user}", `<@${member.id}>`)
-        .replaceAll("{username}", member.user.username)
+        .replaceAll(
+            "{user}",
+            `<@${member.id}>`
+        )
+        .replaceAll(
+            "{username}",
+            member.user.username
+        )
         .replaceAll(
             "{displayname}",
-            member.displayName || member.user.username
+            member.displayName ||
+            member.user.username
         )
-        .replaceAll("{server}", member.guild.name)
-        .replaceAll("{count}", member.guild.memberCount.toString())
-        .replaceAll("{id}", member.id);
+        .replaceAll(
+            "{server}",
+            member.guild.name
+        )
+        .replaceAll(
+            "{count}",
+            member.guild.memberCount.toString()
+        )
+        .replaceAll(
+            "{id}",
+            member.id
+        );
 }
 
 function createBaseEmbed() {
+
     return new EmbedBuilder()
         .setColor("#ff003c")
         .setFooter({
@@ -264,50 +321,72 @@ function createBaseEmbed() {
 }
 
 function isGuildInteraction(interaction) {
-    return Boolean(interaction.guild && interaction.guildId);
+
+    return Boolean(
+        interaction.guild &&
+        interaction.guildId
+    );
 }
 
-function canModerateMember(interaction, targetMember) {
+function canModerateMember(
+    interaction,
+    targetMember
+) {
+
     if (!targetMember) {
         return {
             allowed: false,
-            reason: "That member could not be found."
+            reason:
+                "That member could not be found."
         };
     }
-
-    if (targetMember.id === interaction.guild.ownerId) {
-        return {
-            allowed: false,
-            reason: "You cannot moderate the server owner."
-        };
-    }
-
-    if (targetMember.id === interaction.user.id) {
-        return {
-            allowed: false,
-            reason: "You cannot moderate yourself."
-        };
-    }
-
-    const executor = interaction.member;
 
     if (
-        interaction.user.id !== interaction.guild.ownerId &&
-        targetMember.roles.highest.position >=
-            executor.roles.highest.position
+        targetMember.id ===
+        interaction.guild.ownerId
     ) {
         return {
             allowed: false,
-            reason: "That member has an equal or higher role than you."
+            reason:
+                "You cannot moderate the server owner."
         };
     }
 
-    const botMember = interaction.guild.members.me;
+    if (
+        targetMember.id ===
+        interaction.user.id
+    ) {
+        return {
+            allowed: false,
+            reason:
+                "You cannot moderate yourself."
+        };
+    }
+
+    const executor =
+        interaction.member;
+
+    if (
+        interaction.user.id !==
+        interaction.guild.ownerId &&
+        targetMember.roles.highest.position >=
+        executor.roles.highest.position
+    ) {
+        return {
+            allowed: false,
+            reason:
+                "That member has an equal or higher role than you."
+        };
+    }
+
+    const botMember =
+        interaction.guild.members.me;
 
     if (!botMember) {
         return {
             allowed: false,
-            reason: "I could not determine my server permissions."
+            reason:
+                "I could not determine my server permissions."
         };
     }
 
@@ -317,7 +396,8 @@ function canModerateMember(interaction, targetMember) {
     ) {
         return {
             allowed: false,
-            reason: "That member has an equal or higher role than 27Pro."
+            reason:
+                "That member has an equal or higher role than 27Pro."
         };
     }
 
@@ -327,35 +407,46 @@ function canModerateMember(interaction, targetMember) {
 }
 
 function formatDuration(ms) {
-    const seconds = Math.floor(ms / 1000);
+
+    const seconds =
+        Math.floor(ms / 1000);
 
     if (seconds < 60) {
         return `${seconds}s`;
     }
 
-    const minutes = Math.floor(seconds / 60);
+    const minutes =
+        Math.floor(seconds / 60);
 
     if (minutes < 60) {
         return `${minutes}m`;
     }
 
-    const hours = Math.floor(minutes / 60);
+    const hours =
+        Math.floor(minutes / 60);
 
     if (hours < 24) {
         return `${hours}h`;
     }
 
-    const days = Math.floor(hours / 24);
+    const days =
+        Math.floor(hours / 24);
 
     return `${days}d`;
 }
 
 function getRoleMention(role) {
-    return role ? `<@&${role.id}>` : "None";
+
+    return role
+        ? `<@&${role.id}>`
+        : "None";
 }
 
 function getChannelMention(channel) {
-    return channel ? `<#${channel.id}>` : "None";
+
+    return channel
+        ? `<#${channel.id}>`
+        : "None";
 }
 
 // ============================================================
@@ -364,42 +455,58 @@ function getChannelMention(channel) {
 
 const commands = [
 
-    // ========================================================
+    // --------------------------------------------------------
     // WELCOME
-    // ========================================================
+    // --------------------------------------------------------
 
     new SlashCommandBuilder()
         .setName("welcome")
-        .setDescription("Manage the 27Pro welcome system.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .setDescription(
+            "Manage the 27Pro welcome system."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageGuild
+        )
 
         .addSubcommand(sub =>
             sub
                 .setName("setup")
-                .setDescription("Configure the welcome system.")
+                .setDescription(
+                    "Configure the welcome system."
+                )
                 .addChannelOption(option =>
                     option
                         .setName("channel")
-                        .setDescription("Welcome channel.")
+                        .setDescription(
+                            "Welcome channel."
+                        )
                         .setRequired(true)
-                        .addChannelTypes(ChannelType.GuildText)
+                        .addChannelTypes(
+                            ChannelType.GuildText
+                        )
                 )
                 .addRoleOption(option =>
                     option
                         .setName("role")
-                        .setDescription("Role to automatically give new members.")
+                        .setDescription(
+                            "Role to automatically give new members."
+                        )
                         .setRequired(false)
                 )
                 .addStringOption(option =>
                     option
                         .setName("image")
-                        .setDescription("Welcome image URL.")
+                        .setDescription(
+                            "Welcome image URL."
+                        )
                         .setRequired(false)
                 )
                 .addStringOption(option =>
                     option
                         .setName("message")
-                        .setDescription("Welcome message.")
+                        .setDescription(
+                            "Welcome message."
+                        )
                         .setRequired(false)
                 )
         )
@@ -407,52 +514,68 @@ const commands = [
         .addSubcommand(sub =>
             sub
                 .setName("config")
-                .setDescription("View the current welcome configuration.")
+                .setDescription(
+                    "View the current welcome configuration."
+                )
         )
 
         .addSubcommand(sub =>
             sub
                 .setName("preview")
-                .setDescription("Preview the welcome message.")
+                .setDescription(
+                    "Preview the welcome message."
+                )
         )
 
         .addSubcommand(sub =>
             sub
                 .setName("test")
-                .setDescription("Send a real welcome test.")
+                .setDescription(
+                    "Send a real welcome test."
+                )
         )
 
         .addSubcommand(sub =>
             sub
                 .setName("disable")
-                .setDescription("Disable the welcome system.")
+                .setDescription(
+                    "Disable the welcome system."
+                )
         ),
 
-    // ========================================================
+    // --------------------------------------------------------
     // MODERATION
-    // ========================================================
+    // --------------------------------------------------------
 
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Ban a member.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.BanMembers
+        )
         .addUserOption(option =>
             option
                 .setName("user")
-                .setDescription("Member to ban.")
+                .setDescription(
+                    "Member to ban."
+                )
                 .setRequired(true)
         )
         .addStringOption(option =>
             option
                 .setName("reason")
-                .setDescription("Ban reason.")
+                .setDescription(
+                    "Ban reason."
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("unban")
         .setDescription("Unban a user.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.BanMembers
+        )
         .addStringOption(option =>
             option
                 .setName("userid")
@@ -463,34 +586,48 @@ const commands = [
     new SlashCommandBuilder()
         .setName("kick")
         .setDescription("Kick a member.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.KickMembers
+        )
         .addUserOption(option =>
             option
                 .setName("user")
-                .setDescription("Member to kick.")
+                .setDescription(
+                    "Member to kick."
+                )
                 .setRequired(true)
         )
         .addStringOption(option =>
             option
                 .setName("reason")
-                .setDescription("Kick reason.")
+                .setDescription(
+                    "Kick reason."
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("timeout")
-        .setDescription("Timeout a member.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .setDescription(
+            "Timeout a member."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ModerateMembers
+        )
         .addUserOption(option =>
             option
                 .setName("user")
-                .setDescription("Member to timeout.")
+                .setDescription(
+                    "Member to timeout."
+                )
                 .setRequired(true)
         )
         .addIntegerOption(option =>
             option
                 .setName("minutes")
-                .setDescription("Timeout duration in minutes.")
+                .setDescription(
+                    "Timeout duration in minutes."
+                )
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(40320)
@@ -498,57 +635,85 @@ const commands = [
         .addStringOption(option =>
             option
                 .setName("reason")
-                .setDescription("Timeout reason.")
+                .setDescription(
+                    "Timeout reason."
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("untimeout")
-        .setDescription("Remove a member's timeout.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .setDescription(
+            "Remove a member's timeout."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ModerateMembers
+        )
         .addUserOption(option =>
             option
                 .setName("user")
-                .setDescription("Member to untimeout.")
+                .setDescription(
+                    "Member to untimeout."
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warn")
-        .setDescription("Warn a member.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .setDescription(
+            "Warn a member."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ModerateMembers
+        )
         .addUserOption(option =>
             option
                 .setName("user")
-                .setDescription("Member to warn.")
+                .setDescription(
+                    "Member to warn."
+                )
                 .setRequired(true)
         )
         .addStringOption(option =>
             option
                 .setName("reason")
-                .setDescription("Warning reason.")
+                .setDescription(
+                    "Warning reason."
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("warnings")
-        .setDescription("View a member's warnings.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .setDescription(
+            "View a member's warnings."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ModerateMembers
+        )
         .addUserOption(option =>
             option
                 .setName("user")
-                .setDescription("Member.")
+                .setDescription(
+                    "Member."
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("clear")
-        .setDescription("Delete messages from a channel.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .setDescription(
+            "Delete messages from a channel."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageMessages
+        )
         .addIntegerOption(option =>
             option
                 .setName("amount")
-                .setDescription("Number of messages.")
+                .setDescription(
+                    "Number of messages."
+                )
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(100)
@@ -556,12 +721,18 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("slowmode")
-        .setDescription("Set channel slowmode.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+        .setDescription(
+            "Set channel slowmode."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageChannels
+        )
         .addIntegerOption(option =>
             option
                 .setName("seconds")
-                .setDescription("Slowmode seconds. 0 disables it.")
+                .setDescription(
+                    "Slowmode seconds. 0 disables it."
+                )
                 .setRequired(true)
                 .setMinValue(0)
                 .setMaxValue(21600)
@@ -569,29 +740,43 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("lock")
-        .setDescription("Lock the current channel.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+        .setDescription(
+            "Lock the current channel."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageChannels
+        ),
 
     new SlashCommandBuilder()
         .setName("unlock")
-        .setDescription("Unlock the current channel.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+        .setDescription(
+            "Unlock the current channel."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageChannels
+        ),
 
-    // ========================================================
-    // SERVER
-    // ========================================================
+    // --------------------------------------------------------
+    // SERVER INFO
+    // --------------------------------------------------------
 
     new SlashCommandBuilder()
         .setName("serverinfo")
-        .setDescription("Display server information."),
+        .setDescription(
+            "Display server information."
+        ),
 
     new SlashCommandBuilder()
         .setName("membercount")
-        .setDescription("Display the server member count."),
+        .setDescription(
+            "Display the server member count."
+        ),
 
     new SlashCommandBuilder()
         .setName("userinfo")
-        .setDescription("Display user information.")
+        .setDescription(
+            "Display user information."
+        )
         .addUserOption(option =>
             option
                 .setName("user")
@@ -601,7 +786,9 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("roleinfo")
-        .setDescription("Display role information.")
+        .setDescription(
+            "Display role information."
+        )
         .addRoleOption(option =>
             option
                 .setName("role")
@@ -611,7 +798,9 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("channelinfo")
-        .setDescription("Display channel information.")
+        .setDescription(
+            "Display channel information."
+        )
         .addChannelOption(option =>
             option
                 .setName("channel")
@@ -619,21 +808,27 @@ const commands = [
                 .setRequired(false)
         ),
 
-    // ========================================================
+    // --------------------------------------------------------
     // UTILITY
-    // ========================================================
+    // --------------------------------------------------------
 
     new SlashCommandBuilder()
         .setName("ping")
-        .setDescription("Check 27Pro latency."),
+        .setDescription(
+            "Check 27Pro latency."
+        ),
 
     new SlashCommandBuilder()
         .setName("botinfo")
-        .setDescription("Display 27Pro information."),
+        .setDescription(
+            "Display 27Pro information."
+        ),
 
     new SlashCommandBuilder()
         .setName("avatar")
-        .setDescription("Show a user's avatar.")
+        .setDescription(
+            "Show a user's avatar."
+        )
         .addUserOption(option =>
             option
                 .setName("user")
@@ -643,7 +838,9 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("banner")
-        .setDescription("Show a user's banner.")
+        .setDescription(
+            "Show a user's banner."
+        )
         .addUserOption(option =>
             option
                 .setName("user")
@@ -653,73 +850,107 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("say")
-        .setDescription("Make 27Pro send a message.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .setDescription(
+            "Make 27Pro send a message."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageMessages
+        )
         .addStringOption(option =>
             option
                 .setName("message")
-                .setDescription("Message to send.")
+                .setDescription(
+                    "Message to send."
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("announce")
-        .setDescription("Send an announcement embed.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .setDescription(
+            "Send an announcement embed."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageMessages
+        )
         .addStringOption(option =>
             option
                 .setName("title")
-                .setDescription("Announcement title.")
+                .setDescription(
+                    "Announcement title."
+                )
                 .setRequired(true)
         )
         .addStringOption(option =>
             option
                 .setName("message")
-                .setDescription("Announcement message.")
+                .setDescription(
+                    "Announcement message."
+                )
                 .setRequired(true)
         )
         .addChannelOption(option =>
             option
                 .setName("channel")
-                .setDescription("Announcement channel.")
+                .setDescription(
+                    "Announcement channel."
+                )
                 .setRequired(false)
-                .addChannelTypes(ChannelType.GuildText)
+                .addChannelTypes(
+                    ChannelType.GuildText
+                )
         ),
 
     new SlashCommandBuilder()
         .setName("poll")
-        .setDescription("Create a yes/no poll.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .setDescription(
+            "Create a yes/no poll."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageMessages
+        )
         .addStringOption(option =>
             option
                 .setName("question")
-                .setDescription("Poll question.")
+                .setDescription(
+                    "Poll question."
+                )
                 .setRequired(true)
         ),
 
-    // ========================================================
-    // ROLES
-    // ========================================================
+    // --------------------------------------------------------
+    // ROLE
+    // --------------------------------------------------------
 
     new SlashCommandBuilder()
         .setName("role")
-        .setDescription("Manage server roles.")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+        .setDescription(
+            "Manage server roles."
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageRoles
+        )
 
         .addSubcommand(sub =>
             sub
                 .setName("add")
-                .setDescription("Give a role to a member.")
+                .setDescription(
+                    "Give a role to a member."
+                )
                 .addUserOption(option =>
                     option
                         .setName("user")
-                        .setDescription("Member.")
+                        .setDescription(
+                            "Member."
+                        )
                         .setRequired(true)
                 )
                 .addRoleOption(option =>
                     option
                         .setName("role")
-                        .setDescription("Role.")
+                        .setDescription(
+                            "Role."
+                        )
                         .setRequired(true)
                 )
         )
@@ -727,17 +958,23 @@ const commands = [
         .addSubcommand(sub =>
             sub
                 .setName("remove")
-                .setDescription("Remove a role from a member.")
+                .setDescription(
+                    "Remove a role from a member."
+                )
                 .addUserOption(option =>
                     option
                         .setName("user")
-                        .setDescription("Member.")
+                        .setDescription(
+                            "Member."
+                        )
                         .setRequired(true)
                 )
                 .addRoleOption(option =>
                     option
                         .setName("role")
-                        .setDescription("Role.")
+                        .setDescription(
+                            "Role."
+                        )
                         .setRequired(true)
                 )
         )
@@ -745,11 +982,15 @@ const commands = [
         .addSubcommand(sub =>
             sub
                 .setName("create")
-                .setDescription("Create a role.")
+                .setDescription(
+                    "Create a role."
+                )
                 .addStringOption(option =>
                     option
                         .setName("name")
-                        .setDescription("Role name.")
+                        .setDescription(
+                            "Role name."
+                        )
                         .setRequired(true)
                 )
         )
@@ -757,40 +998,54 @@ const commands = [
         .addSubcommand(sub =>
             sub
                 .setName("delete")
-                .setDescription("Delete a role.")
+                .setDescription(
+                    "Delete a role."
+                )
                 .addRoleOption(option =>
                     option
                         .setName("role")
-                        .setDescription("Role to delete.")
+                        .setDescription(
+                            "Role to delete."
+                        )
                         .setRequired(true)
                 )
         ),
 
-    // ========================================================
+    // --------------------------------------------------------
     // FUN
-    // ========================================================
+    // --------------------------------------------------------
 
     new SlashCommandBuilder()
         .setName("8ball")
-        .setDescription("Ask the magic 8-ball a question.")
+        .setDescription(
+            "Ask the magic 8-ball a question."
+        )
         .addStringOption(option =>
             option
                 .setName("question")
-                .setDescription("Your question.")
+                .setDescription(
+                    "Your question."
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("coinflip")
-        .setDescription("Flip a coin."),
+        .setDescription(
+            "Flip a coin."
+        ),
 
     new SlashCommandBuilder()
         .setName("roll")
-        .setDescription("Roll a dice.")
+        .setDescription(
+            "Roll a dice."
+        )
         .addIntegerOption(option =>
             option
                 .setName("sides")
-                .setDescription("Number of sides.")
+                .setDescription(
+                    "Number of sides."
+                )
                 .setRequired(false)
                 .setMinValue(2)
                 .setMaxValue(1000)
@@ -798,11 +1053,15 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("choose")
-        .setDescription("Choose between options.")
+        .setDescription(
+            "Choose between options."
+        )
         .addStringOption(option =>
             option
                 .setName("options")
-                .setDescription("Separate options using commas.")
+                .setDescription(
+                    "Separate options using commas."
+                )
                 .setRequired(true)
         )
 
@@ -818,6 +1077,7 @@ async function registerCommands() {
         console.error(
             "❌ Cannot register commands: TOKEN is missing."
         );
+
         return false;
     }
 
@@ -825,6 +1085,7 @@ async function registerCommands() {
         console.error(
             "❌ Cannot register commands: GUILD_ID is missing."
         );
+
         return false;
     }
 
@@ -832,6 +1093,7 @@ async function registerCommands() {
         console.error(
             "❌ Cannot register commands: Discord client is not ready."
         );
+
         return false;
     }
 
@@ -843,17 +1105,19 @@ async function registerCommands() {
             }).setToken(TOKEN);
 
         // IMPORTANT:
-        // Use the application ID belonging to the token
-        // that actually logged into Discord.
+        // Use the application ID belonging to the
+        // token that actually logged into Discord.
         const applicationId =
             client.user.id;
 
         console.log("==========================================");
-        console.log("🔄 REGISTERING 27PRO COMMANDS");
+        console.log(
+            "🔄 REGISTERING 27PRO SLASH COMMANDS"
+        );
         console.log("==========================================");
 
         console.log(
-            "Actual Application ID:",
+            "REAL Application ID:",
             applicationId
         );
 
@@ -863,7 +1127,7 @@ async function registerCommands() {
         );
 
         console.log(
-            "Guild ID:",
+            "Target Guild ID:",
             GUILD_ID
         );
 
@@ -876,12 +1140,13 @@ async function registerCommands() {
             CLIENT_ID &&
             CLIENT_ID !== applicationId
         ) {
+
             console.warn(
-                "⚠️ CLIENT_ID does not match the bot authenticated by TOKEN."
+                "⚠️ CLIENT_ID DOES NOT MATCH THE BOT TOKEN."
             );
 
             console.warn(
-                "⚠️ Using the authenticated bot's ID instead."
+                "⚠️ Using client.user.id instead."
             );
         }
 
@@ -899,7 +1164,6 @@ async function registerCommands() {
             `✅ Successfully registered ${commands.length} commands.`
         );
 
-        // Verify commands actually exist on Discord.
         const registered =
             await rest.get(
                 Routes.applicationGuildCommands(
@@ -913,7 +1177,7 @@ async function registerCommands() {
         );
 
         console.log(
-            "Registered:",
+            "Registered commands:",
             registered
                 .map(command => command.name)
                 .join(", ")
@@ -946,23 +1210,30 @@ client.once("ready", async () => {
     console.log("==========================================");
 
     console.log(
-        `👤 Username: ${client.user.tag}`
+        "Username:",
+        client.user.tag
     );
 
     console.log(
-        `🆔 REAL Application ID: ${client.user.id}`
+        "REAL Application ID:",
+        client.user.id
     );
 
     console.log(
-        `🏠 Guilds: ${client.guilds.cache.size}`
+        "Guild count:",
+        client.guilds.cache.size
     );
 
     console.log(
-        `📡 Discord Ping: ${client.ws.ping}ms`
+        "Discord Ping:",
+        client.ws.ping,
+        "ms"
     );
 
     const guild =
-        client.guilds.cache.get(GUILD_ID);
+        client.guilds.cache.get(
+            GUILD_ID
+        );
 
     if (guild) {
 
@@ -981,7 +1252,7 @@ client.once("ready", async () => {
         );
 
         console.error(
-            "The GUILD_ID does not appear to be a server this bot is in."
+            "The GUILD_ID in Hostinger does not appear to be a server this bot is in."
         );
     }
 
@@ -1001,7 +1272,7 @@ client.once("ready", async () => {
 });
 
 // ============================================================
-// INTERACTION HANDLER
+// INTERACTIONS
 // ============================================================
 
 client.on(
@@ -1020,22 +1291,26 @@ client.on(
 
         console.log(
             "Command:",
-            interaction.commandName || "unknown"
+            interaction.commandName ||
+            "unknown"
         );
 
         console.log(
             "User:",
-            interaction.user?.tag || "unknown"
+            interaction.user?.tag ||
+            "unknown"
         );
 
         console.log(
             "User ID:",
-            interaction.user?.id || "unknown"
+            interaction.user?.id ||
+            "unknown"
         );
 
         console.log(
             "Guild ID:",
-            interaction.guildId || "DM"
+            interaction.guildId ||
+            "DM"
         );
 
         console.log(
@@ -1046,8 +1321,9 @@ client.on(
         console.log("==========================================");
 
         if (!interaction.isChatInputCommand()) {
+
             console.log(
-                "ℹ️ Interaction is not a slash command."
+                "ℹ️ Not a slash command."
             );
 
             return;
@@ -1069,9 +1345,48 @@ client.on(
             const command =
                 interaction.commandName;
 
-            // ====================================================
+            // ==================================================
+            // PING
+            // ==================================================
+
+            if (command === "ping") {
+
+                console.log(
+                    "🏓 /ping received."
+                );
+
+                const start =
+                    Date.now();
+
+                await interaction.reply({
+                    content:
+                        "🏓 **Pong!**"
+                });
+
+                const responseTime =
+                    Date.now() - start;
+
+                console.log(
+                    `✅ /ping replied in ${responseTime}ms`
+                );
+
+                await interaction.editReply({
+                    content:
+                        `🏓 **Pong!**\n` +
+                        `API: **${client.ws.ping}ms**\n` +
+                        `Response: **${responseTime}ms**`
+                });
+
+                console.log(
+                    "✅ /ping editReply successful."
+                );
+
+                return;
+            }
+
+            // ==================================================
             // WELCOME
-            // ====================================================
+            // ==================================================
 
             if (command === "welcome") {
 
@@ -1113,20 +1428,15 @@ client.on(
                             {
                                 guildId:
                                     interaction.guildId,
-
                                 enabled: true,
-
                                 channelId:
                                     channel.id,
-
                                 roleId:
                                     role
                                         ? role.id
                                         : null,
-
                                 image:
                                     image || null,
-
                                 message:
                                     message ||
                                     DEFAULT_WELCOME_MESSAGE
@@ -1248,13 +1558,10 @@ client.on(
                         return;
                     }
 
-                    const fakeMember =
-                        interaction.member;
-
                     const welcomeText =
                         replaceVariables(
                             config.message,
-                            fakeMember
+                            interaction.member
                         );
 
                     const embed =
@@ -1267,7 +1574,7 @@ client.on(
                                 welcomeText
                             )
                             .setThumbnail(
-                                fakeMember.user.displayAvatarURL(
+                                interaction.user.displayAvatarURL(
                                     {
                                         size: 256
                                     }
@@ -1391,9 +1698,9 @@ client.on(
                 }
             }
 
-            // ====================================================
+            // ==================================================
             // BAN
-            // ====================================================
+            // ==================================================
 
             if (command === "ban") {
 
@@ -1443,7 +1750,7 @@ client.on(
                             {
                                 name: "User",
                                 value:
-                                    `${user.tag}`,
+                                    user.tag,
                                 inline: true
                             },
                             {
@@ -1466,9 +1773,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // UNBAN
-            // ====================================================
+            // ==================================================
 
             if (command === "unban") {
 
@@ -1505,9 +1812,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // KICK
-            // ====================================================
+            // ==================================================
 
             if (command === "kick") {
 
@@ -1554,9 +1861,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // TIMEOUT
-            // ====================================================
+            // ==================================================
 
             if (command === "timeout") {
 
@@ -1611,9 +1918,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // UNTIMEOUT
-            // ====================================================
+            // ==================================================
 
             if (command === "untimeout") {
 
@@ -1648,9 +1955,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // WARN
-            // ====================================================
+            // ==================================================
 
             if (command === "warn") {
 
@@ -1688,7 +1995,8 @@ client.on(
                 }
 
                 if (
-                    mongoose.connection.readyState !== 1
+                    mongoose.connection.readyState !==
+                    1
                 ) {
 
                     await interaction.reply({
@@ -1724,11 +2032,9 @@ client.on(
                             "⚠️ Member Warned"
                         )
                         .setThumbnail(
-                            user.displayAvatarURL(
-                                {
-                                    size: 256
-                                }
-                            )
+                            user.displayAvatarURL({
+                                size: 256
+                            })
                         )
                         .addFields(
                             {
@@ -1763,9 +2069,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // WARNINGS
-            // ====================================================
+            // ==================================================
 
             if (command === "warnings") {
 
@@ -1775,7 +2081,8 @@ client.on(
                     );
 
                 if (
-                    mongoose.connection.readyState !== 1
+                    mongoose.connection.readyState !==
+                    1
                 ) {
 
                     await interaction.reply({
@@ -1825,11 +2132,7 @@ client.on(
                         )
                         .setDescription(
                             text
-                        )
-                        .setFooter({
-                            text:
-                                `${BOT_FOOTER} • Showing latest 10`
-                        });
+                        );
 
                 await interaction.reply({
                     embeds: [embed]
@@ -1838,9 +2141,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // CLEAR
-            // ====================================================
+            // ==================================================
 
             if (command === "clear") {
 
@@ -1877,9 +2180,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // SLOWMODE
-            // ====================================================
+            // ==================================================
 
             if (command === "slowmode") {
 
@@ -1887,19 +2190,6 @@ client.on(
                     interaction.options.getInteger(
                         "seconds"
                     );
-
-                if (
-                    !interaction.channel.isTextBased()
-                ) {
-
-                    await interaction.reply({
-                        content:
-                            "❌ This channel does not support slowmode.",
-                        ephemeral: true
-                    });
-
-                    return;
-                }
 
                 await interaction.channel.setRateLimitPerUser(
                     seconds
@@ -1915,9 +2205,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // LOCK
-            // ====================================================
+            // ==================================================
 
             if (command === "lock") {
 
@@ -1936,9 +2226,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // UNLOCK
-            // ====================================================
+            // ==================================================
 
             if (command === "unlock") {
 
@@ -1957,9 +2247,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // SERVER INFO
-            // ====================================================
+            // ==================================================
 
             if (command === "serverinfo") {
 
@@ -2024,31 +2314,23 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // MEMBER COUNT
-            // ====================================================
+            // ==================================================
 
             if (command === "membercount") {
 
-                const embed =
-                    createBaseEmbed()
-                        .setTitle(
-                            "👥 Server Members"
-                        )
-                        .setDescription(
-                            `This server currently has **${interaction.guild.memberCount}** members.`
-                        );
-
                 await interaction.reply({
-                    embeds: [embed]
+                    content:
+                        `👥 This server currently has **${interaction.guild.memberCount}** members.`
                 });
 
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // USER INFO
-            // ====================================================
+            // ==================================================
 
             if (command === "userinfo") {
 
@@ -2102,8 +2384,7 @@ client.on(
                                 inline: true
                             },
                             {
-                                name:
-                                    "Account Created",
+                                name: "Account Created",
                                 value:
                                     `<t:${Math.floor(
                                         user.createdTimestamp / 1000
@@ -2111,8 +2392,7 @@ client.on(
                                 inline: true
                             },
                             {
-                                name:
-                                    "Joined Server",
+                                name: "Joined Server",
                                 value:
                                     member
                                         ? `<t:${Math.floor(
@@ -2136,9 +2416,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // ROLE INFO
-            // ====================================================
+            // ==================================================
 
             if (command === "roleinfo") {
 
@@ -2196,9 +2476,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // CHANNEL INFO
-            // ====================================================
+            // ==================================================
 
             if (command === "channelinfo") {
 
@@ -2243,59 +2523,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
-            // PING
-            // ====================================================
-
-            if (command === "ping") {
-
-                console.log(
-                    "🏓 /ping received."
-                );
-
-                try {
-
-                    const start =
-                        Date.now();
-
-                    await interaction.reply({
-                        content:
-                            "🏓 **Pong!**"
-                    });
-
-                    const responseTime =
-                        Date.now() - start;
-
-                    console.log(
-                        `✅ /ping replied successfully in ${responseTime}ms`
-                    );
-
-                    await interaction.editReply({
-                        content:
-                            `🏓 **Pong!**\n` +
-                            `API: **${client.ws.ping}ms**\n` +
-                            `Response: **${responseTime}ms**`
-                    });
-
-                    console.log(
-                        "✅ /ping editReply successful."
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        "❌ /ping FAILED:"
-                    );
-
-                    console.error(error);
-                }
-
-                return;
-            }
-
-            // ====================================================
+            // ==================================================
             // BOT INFO
-            // ====================================================
+            // ==================================================
 
             if (command === "botinfo") {
 
@@ -2353,9 +2583,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // AVATAR
-            // ====================================================
+            // ==================================================
 
             if (command === "avatar") {
 
@@ -2384,9 +2614,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // BANNER
-            // ====================================================
+            // ==================================================
 
             if (command === "banner") {
 
@@ -2433,9 +2663,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // SAY
-            // ====================================================
+            // ==================================================
 
             if (command === "say") {
 
@@ -2458,9 +2688,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // ANNOUNCE
-            // ====================================================
+            // ==================================================
 
             if (command === "announce") {
 
@@ -2509,9 +2739,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // POLL
-            // ====================================================
+            // ==================================================
 
             if (command === "poll") {
 
@@ -2529,11 +2759,7 @@ client.on(
                             `**${question}**\n\n` +
                             "👍 Yes\n" +
                             "👎 No"
-                        )
-                        .setFooter({
-                            text:
-                                `${BOT_FOOTER} • Poll`
-                        });
+                        );
 
                 const message =
                     await interaction.channel.send({
@@ -2552,9 +2778,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
-            // ROLE COMMAND
-            // ====================================================
+            // ==================================================
+            // ROLE
+            // ==================================================
 
             if (command === "role") {
 
@@ -2628,7 +2854,9 @@ client.on(
                         return;
                     }
 
-                    await member.roles.add(role);
+                    await member.roles.add(
+                        role
+                    );
 
                     await interaction.reply({
                         content:
@@ -2691,7 +2919,9 @@ client.on(
                         return;
                     }
 
-                    await member.roles.remove(role);
+                    await member.roles.remove(
+                        role
+                    );
 
                     await interaction.reply({
                         content:
@@ -2771,9 +3001,9 @@ client.on(
                 }
             }
 
-            // ====================================================
+            // ==================================================
             // 8BALL
-            // ====================================================
+            // ==================================================
 
             if (command === "8ball") {
 
@@ -2826,9 +3056,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // COINFLIP
-            // ====================================================
+            // ==================================================
 
             if (command === "coinflip") {
 
@@ -2845,9 +3075,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // ROLL
-            // ====================================================
+            // ==================================================
 
             if (command === "roll") {
 
@@ -2871,9 +3101,9 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // CHOOSE
-            // ====================================================
+            // ==================================================
 
             if (command === "choose") {
 
@@ -2914,15 +3144,18 @@ client.on(
                 return;
             }
 
-            // ====================================================
+            // ==================================================
             // UNKNOWN COMMAND
-            // ====================================================
+            // ==================================================
 
             console.warn(
                 `⚠️ No handler exists for /${command}`
             );
 
-            if (!interaction.replied && !interaction.deferred) {
+            if (
+                !interaction.replied &&
+                !interaction.deferred
+            ) {
 
                 await interaction.reply({
                     content:
@@ -2994,10 +3227,11 @@ client.on(
         try {
 
             if (
-                mongoose.connection.readyState !== 1
+                mongoose.connection.readyState !==
+                1
             ) {
                 console.warn(
-                    "⚠️ MongoDB unavailable. Welcome system skipped."
+                    "⚠️ MongoDB unavailable. Welcome skipped."
                 );
 
                 return;
@@ -3016,12 +3250,9 @@ client.on(
                 return;
             }
 
-            let roleResult =
-                "No role configured.";
-
-            // ====================================================
+            // --------------------------------------------------
             // AUTO ROLE
-            // ====================================================
+            // --------------------------------------------------
 
             if (config.roleId) {
 
@@ -3035,46 +3266,31 @@ client.on(
 
                 if (
                     role &&
-                    botMember
+                    botMember &&
+                    role.position <
+                    botMember.roles.highest.position
                 ) {
 
-                    if (
-                        role.position <
-                        botMember.roles.highest.position
-                    ) {
+                    try {
 
-                        try {
+                        await member.roles.add(
+                            role,
+                            "27Pro automatic welcome role"
+                        );
 
-                            await member.roles.add(
-                                role,
-                                "27Pro automatic welcome role"
-                            );
+                    } catch (error) {
 
-                            roleResult =
-                                `Role assigned: ${role.name}`;
-
-                        } catch (error) {
-
-                            console.error(
-                                "❌ Could not assign welcome role:",
-                                error.message
-                            );
-
-                            roleResult =
-                                "Could not assign welcome role.";
-                        }
-
-                    } else {
-
-                        roleResult =
-                            "Welcome role is above 27Pro's role.";
+                        console.error(
+                            "❌ Could not assign welcome role:",
+                            error.message
+                        );
                     }
                 }
             }
 
-            // ====================================================
-            // WELCOME CHANNEL
-            // ====================================================
+            // --------------------------------------------------
+            // WELCOME MESSAGE
+            // --------------------------------------------------
 
             const channel =
                 member.guild.channels.cache.get(
@@ -3143,54 +3359,14 @@ client.on(
                 `✅ Welcome sent for ${member.user.tag}`
             );
 
-            console.log(
-                `🎭 ${roleResult}`
-            );
-
         } catch (error) {
 
             console.error(
-                "❌ Welcome system error:",
-                error
+                "❌ Welcome system error:"
             );
+
+            console.error(error);
         }
-    }
-);
-
-// ============================================================
-// DISCORD ERRORS
-// ============================================================
-
-client.on(
-    "error",
-    error => {
-
-        console.error(
-            "❌ Discord client error:",
-            error
-        );
-    }
-);
-
-client.on(
-    "warn",
-    warning => {
-
-        console.warn(
-            "⚠️ Discord warning:",
-            warning
-        );
-    }
-);
-
-client.on(
-    "shardError",
-    error => {
-
-        console.error(
-            "❌ Discord shard error:",
-            error
-        );
     }
 );
 
@@ -3203,9 +3379,10 @@ process.on(
     error => {
 
         console.error(
-            "❌ Unhandled promise rejection:",
-            error
+            "❌ UNHANDLED PROMISE REJECTION:"
         );
+
+        console.error(error);
     }
 );
 
@@ -3214,9 +3391,10 @@ process.on(
     error => {
 
         console.error(
-            "❌ Uncaught exception:",
-            error
+            "❌ UNCAUGHT EXCEPTION:"
         );
+
+        console.error(error);
     }
 );
 
@@ -3239,33 +3417,74 @@ async function startBot() {
             return;
         }
 
-        if (!GUILD_ID) {
-
-            console.error(
-                "❌ Bot cannot register commands without GUILD_ID."
-            );
-
-            return;
-        }
-
         console.log(
             "🔄 Connecting 27Pro to Discord..."
         );
 
-        await client.login(
-            TOKEN
+        console.log(
+            "🔐 TOKEN exists:",
+            !!TOKEN
+        );
+
+        console.log(
+            "🔐 TOKEN length:",
+            TOKEN.length
+        );
+
+        // Only show a tiny non-sensitive portion.
+        console.log(
+            "🔐 TOKEN starts with:",
+            TOKEN.substring(0, 5) + "..."
+        );
+
+        console.log(
+            "🆔 Configured CLIENT_ID:",
+            CLIENT_ID || "MISSING"
+        );
+
+        console.log(
+            "🏠 Configured GUILD_ID:",
+            GUILD_ID || "MISSING"
+        );
+
+        console.log(
+            "🚀 Calling client.login() now..."
+        );
+
+        await client.login(TOKEN);
+
+        console.log(
+            "✅ client.login() completed."
         );
 
     } catch (error) {
 
         console.error(
-            "❌ Discord login failed:"
+            "❌ DISCORD LOGIN FAILED:"
         );
 
         console.error(
             error
         );
+
+        if (error?.code) {
+            console.error(
+                "Discord error code:",
+                error.code
+            );
+        }
+
+        if (error?.message) {
+            console.error(
+                "Discord error message:",
+                error.message
+            );
+        }
     }
 }
+
+// ============================================================
+// START
+// ============================================================
 
 startBot();
