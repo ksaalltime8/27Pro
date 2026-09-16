@@ -1,3 +1,22 @@
+// ============================================================
+// 27PRO — ALL-IN-ONE DISCORD BOT
+// ============================================================
+// Features:
+// 👋 Welcome system
+// 🛡️ Moderation
+// ⚙️ Server information
+// 🔧 Utility commands
+// 🎭 Role management
+// 🎲 Fun commands
+// 🗄️ MongoDB persistence
+// 🌐 Hostinger health server
+//
+// IMPORTANT:
+// - Keep your real TOKEN and MONGODB_URI private.
+// - Enable Server Members Intent in Discord Developer Portal.
+// - Put the 27Pro bot role ABOVE roles it needs to manage.
+// ============================================================
+
 require("dotenv").config();
 
 const http = require("http");
@@ -6,24 +25,88 @@ const mongoose = require("mongoose");
 const {
     Client,
     GatewayIntentBits,
-    SlashCommandBuilder,
     PermissionFlagsBits,
     EmbedBuilder,
-    ChannelType,
+    SlashCommandBuilder,
     REST,
     Routes,
-    ActivityType
+    ChannelType
 } = require("discord.js");
 
 // ============================================================
-// 27PRO — ENVIRONMENT
+// CONFIG
 // ============================================================
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const MONGODB_URI = process.env.MONGODB_URI;
-const PORT = Number(process.env.PORT) || 5000;
+
+const PORT = process.env.PORT || 5000;
+
+const BOT_NAME = "27Pro";
+const BOT_FOOTER = "27Pro • Made by iik27";
+
+const DEFAULT_WELCOME_MESSAGE =
+    "Welcome {user} to **{server}**! You are member #{count}. Enjoy your stay!";
+
+// ============================================================
+// ENV CHECK
+// ============================================================
+
+console.log("==========================================");
+console.log("          27PRO STARTUP CHECK");
+console.log("==========================================");
+
+console.log("TOKEN:", TOKEN ? "FOUND" : "MISSING");
+console.log("CLIENT_ID:", CLIENT_ID ? "FOUND" : "MISSING");
+console.log("GUILD_ID:", GUILD_ID ? "FOUND" : "MISSING");
+console.log("MONGODB_URI:", MONGODB_URI ? "FOUND" : "MISSING");
+console.log("PORT:", PORT);
+
+if (!TOKEN) {
+    console.error("❌ TOKEN is missing.");
+}
+
+if (!CLIENT_ID) {
+    console.error("❌ CLIENT_ID is missing.");
+}
+
+if (!GUILD_ID) {
+    console.error("❌ GUILD_ID is missing.");
+}
+
+if (!MONGODB_URI) {
+    console.error("❌ MONGODB_URI is missing.");
+}
+
+// ============================================================
+// HOSTINGER HTTP SERVER
+// ============================================================
+// Hostinger expects the application to listen on a port.
+// This server starts immediately so the platform knows the
+// application is alive.
+// ============================================================
+
+const server = http.createServer((req, res) => {
+    res.writeHead(200, {
+        "Content-Type": "application/json"
+    });
+
+    res.end(
+        JSON.stringify({
+            status: "online",
+            bot: BOT_NAME,
+            message: "27Pro Discord Bot is online.",
+            uptime: Math.floor(process.uptime()),
+            timestamp: new Date().toISOString()
+        })
+    );
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+    console.log(`🌐 Hostinger server listening on port ${PORT}`);
+});
 
 // ============================================================
 // DISCORD CLIENT
@@ -32,53 +115,16 @@ const PORT = Number(process.env.PORT) || 5000;
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages
     ]
 });
 
 // ============================================================
-// HOSTINGER HTTP SERVER
+// MONGODB SCHEMAS
 // ============================================================
 
-const server = http.createServer((req, res) => {
-    res.setHeader("Content-Type", "application/json");
-
-    if (req.url === "/" || req.url === "/api/health") {
-        res.writeHead(200);
-
-        res.end(
-            JSON.stringify({
-                status: "online",
-                bot: client.isReady() ? "online" : "starting",
-                database:
-                    mongoose.connection.readyState === 1
-                        ? "connected"
-                        : "disconnected",
-                uptime: Math.floor(process.uptime())
-            })
-        );
-
-        return;
-    }
-
-    res.writeHead(404);
-
-    res.end(
-        JSON.stringify({
-            error: "Not found"
-        })
-    );
-});
-
-server.listen(PORT, "0.0.0.0", () => {
-    console.log(`🌐 27Pro HTTP server listening on port ${PORT}`);
-});
-
-// ============================================================
-// MONGODB SCHEMA
-// ============================================================
-
-const WelcomeConfigSchema = new mongoose.Schema(
+const welcomeSchema = new mongoose.Schema(
     {
         guildId: {
             type: String,
@@ -88,7 +134,7 @@ const WelcomeConfigSchema = new mongoose.Schema(
 
         enabled: {
             type: Boolean,
-            default: false
+            default: true
         },
 
         channelId: {
@@ -108,12 +154,7 @@ const WelcomeConfigSchema = new mongoose.Schema(
 
         message: {
             type: String,
-            default: "Welcome {user} to **{server}**!"
-        },
-
-        color: {
-            type: String,
-            default: "#8B0000"
+            default: DEFAULT_WELCOME_MESSAGE
         }
     },
     {
@@ -121,9 +162,60 @@ const WelcomeConfigSchema = new mongoose.Schema(
     }
 );
 
-const WelcomeConfig =
-    mongoose.models.WelcomeConfig ||
-    mongoose.model("WelcomeConfig", WelcomeConfigSchema);
+const warningSchema = new mongoose.Schema(
+    {
+        guildId: {
+            type: String,
+            required: true
+        },
+
+        userId: {
+            type: String,
+            required: true
+        },
+
+        moderatorId: {
+            type: String,
+            required: true
+        },
+
+        reason: {
+            type: String,
+            default: "No reason provided"
+        }
+    },
+    {
+        timestamps: true
+    }
+);
+
+const guildSettingsSchema = new mongoose.Schema(
+    {
+        guildId: {
+            type: String,
+            required: true,
+            unique: true
+        }
+    },
+    {
+        timestamps: true
+    }
+);
+
+const WelcomeConfig = mongoose.model(
+    "WelcomeConfig",
+    welcomeSchema
+);
+
+const Warning = mongoose.model(
+    "Warning",
+    warningSchema
+);
+
+const GuildSettings = mongoose.model(
+    "GuildSettings",
+    guildSettingsSchema
+);
 
 // ============================================================
 // DATABASE
@@ -131,14 +223,12 @@ const WelcomeConfig =
 
 async function connectDatabase() {
     if (!MONGODB_URI) {
-        console.error("❌ MONGODB_URI is missing.");
+        console.error("⚠️ MongoDB URI missing. Database disabled.");
         return;
     }
 
     try {
-        await mongoose.connect(MONGODB_URI, {
-            serverSelectionTimeoutMS: 10000
-        });
+        await mongoose.connect(MONGODB_URI);
 
         console.log("✅ MongoDB connected.");
     } catch (error) {
@@ -148,256 +238,593 @@ async function connectDatabase() {
 }
 
 // ============================================================
-// COLOR HELPER
+// HELPERS
 // ============================================================
 
-function getColor(color) {
-    if (!color) {
-        return 0x8B0000;
+function replaceVariables(message, member) {
+    if (!message) {
+        return DEFAULT_WELCOME_MESSAGE;
     }
 
-    const cleaned = color.replace("#", "");
-
-    if (!/^[0-9A-Fa-f]{6}$/.test(cleaned)) {
-        return 0x8B0000;
-    }
-
-    return parseInt(cleaned, 16);
-}
-
-// ============================================================
-// MESSAGE VARIABLES
-// ============================================================
-
-function formatMessage(message, member) {
     return message
         .replaceAll("{user}", `<@${member.id}>`)
         .replaceAll("{username}", member.user.username)
-        .replaceAll("{displayname}", member.displayName)
+        .replaceAll(
+            "{displayname}",
+            member.displayName || member.user.username
+        )
         .replaceAll("{server}", member.guild.name)
         .replaceAll("{count}", member.guild.memberCount.toString())
         .replaceAll("{id}", member.id);
 }
 
-// ============================================================
-// WELCOME EMBED
-// ============================================================
-
-function createWelcomeEmbed(config, member) {
-    const message = formatMessage(
-        config.message ||
-            "Welcome {user} to **{server}**!",
-        member
-    );
-
-    const embed = new EmbedBuilder()
-        .setTitle("✦ Welcome to the server")
-        .setDescription(message)
-        .setColor(getColor(config.color))
-        .setThumbnail(
-            member.user.displayAvatarURL({
-                extension: "png",
-                size: 256
-            })
-        )
-        .addFields(
-            {
-                name: "👤 Member",
-                value: `<@${member.id}>`,
-                inline: true
-            },
-            {
-                name: "🔢 Member #",
-                value: `${member.guild.memberCount}`,
-                inline: true
-            },
-            {
-                name: "📅 Account",
-                value:
-                    `<t:${Math.floor(
-                        member.user.createdTimestamp / 1000
-                    )}:R>`,
-                inline: true
-            }
-        )
+function createBaseEmbed() {
+    return new EmbedBuilder()
+        .setColor("#ff003c")
         .setFooter({
-            text: `${member.guild.name} • 27Pro`
+            text: BOT_FOOTER
         })
         .setTimestamp();
+}
 
-    if (config.image) {
-        embed.setImage(config.image);
+function isGuildInteraction(interaction) {
+    return interaction.guild && interaction.guildId;
+}
+
+function canModerateMember(interaction, targetMember) {
+    if (!targetMember) {
+        return {
+            allowed: false,
+            reason: "That member could not be found."
+        };
     }
 
-    return embed;
+    if (targetMember.id === interaction.guild.ownerId) {
+        return {
+            allowed: false,
+            reason: "You cannot moderate the server owner."
+        };
+    }
+
+    if (targetMember.id === interaction.user.id) {
+        return {
+            allowed: false,
+            reason: "You cannot moderate yourself."
+        };
+    }
+
+    const executor = interaction.member;
+
+    if (
+        interaction.user.id !== interaction.guild.ownerId &&
+        targetMember.roles.highest.position >=
+            executor.roles.highest.position
+    ) {
+        return {
+            allowed: false,
+            reason: "That member has an equal or higher role than you."
+        };
+    }
+
+    const botMember = interaction.guild.members.me;
+
+    if (!botMember) {
+        return {
+            allowed: false,
+            reason: "I could not determine my server permissions."
+        };
+    }
+
+    if (
+        targetMember.roles.highest.position >=
+        botMember.roles.highest.position
+    ) {
+        return {
+            allowed: false,
+            reason: "That member has an equal or higher role than 27Pro."
+        };
+    }
+
+    return {
+        allowed: true
+    };
+}
+
+function formatDuration(ms) {
+    const seconds = Math.floor(ms / 1000);
+
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+
+    const minutes = Math.floor(seconds / 60);
+
+    if (minutes < 60) {
+        return `${minutes}m`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+
+    if (hours < 24) {
+        return `${hours}h`;
+    }
+
+    const days = Math.floor(hours / 24);
+
+    return `${days}d`;
+}
+
+function getRoleMention(role) {
+    return role ? `<@&${role.id}>` : "None";
+}
+
+function getChannelMention(channel) {
+    return channel ? `<#${channel.id}>` : "None";
 }
 
 // ============================================================
-// /WELCOME COMMAND
+// SLASH COMMANDS
 // ============================================================
 
-const welcomeCommand =
+const commands = [
+
+    // ========================================================
+    // WELCOME
+    // ========================================================
+
     new SlashCommandBuilder()
         .setName("welcome")
-        .setDescription(
-            "Manage the 27Pro welcome system"
-        )
-
-        // ----------------------------------------------------
-        // SETUP
-        // ----------------------------------------------------
-
-        .addSubcommand(subcommand =>
-            subcommand
+        .setDescription("Manage the 27Pro welcome system.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addSubcommand(sub =>
+            sub
                 .setName("setup")
-                .setDescription(
-                    "Configure the welcome system"
-                )
-
+                .setDescription("Configure the welcome system.")
                 .addChannelOption(option =>
                     option
                         .setName("channel")
-                        .setDescription(
-                            "Channel for welcome messages"
-                        )
-                        .addChannelTypes(
-                            ChannelType.GuildText
-                        )
+                        .setDescription("Welcome channel.")
                         .setRequired(true)
+                        .addChannelTypes(ChannelType.GuildText)
                 )
-
                 .addRoleOption(option =>
                     option
                         .setName("role")
-                        .setDescription(
-                            "Role given to new members"
-                        )
-                        .setRequired(true)
+                        .setDescription("Role to automatically give new members.")
+                        .setRequired(false)
                 )
-
                 .addStringOption(option =>
                     option
                         .setName("image")
-                        .setDescription(
-                            "Welcome image URL"
-                        )
-                        .setRequired(true)
+                        .setDescription("Welcome image URL.")
+                        .setRequired(false)
                 )
-
                 .addStringOption(option =>
                     option
                         .setName("message")
-                        .setDescription(
-                            "Welcome message"
-                        )
-                        .setRequired(true)
-                )
-
-                .addStringOption(option =>
-                    option
-                        .setName("color")
-                        .setDescription(
-                            "Embed color, example: #8B0000"
-                        )
+                        .setDescription("Welcome message.")
                         .setRequired(false)
                 )
         )
 
-        // ----------------------------------------------------
-        // CONFIG
-        // ----------------------------------------------------
-
-        .addSubcommand(subcommand =>
-            subcommand
+        .addSubcommand(sub =>
+            sub
                 .setName("config")
-                .setDescription(
-                    "View welcome configuration"
-                )
+                .setDescription("View the current welcome configuration.")
         )
 
-        // ----------------------------------------------------
-        // TEST
-        // ----------------------------------------------------
-
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName("test")
-                .setDescription(
-                    "Send a test welcome message"
-                )
-        )
-
-        // ----------------------------------------------------
-        // PREVIEW
-        // ----------------------------------------------------
-
-        .addSubcommand(subcommand =>
-            subcommand
+        .addSubcommand(sub =>
+            sub
                 .setName("preview")
-                .setDescription(
-                    "Preview the welcome message"
-                )
+                .setDescription("Preview the welcome message.")
         )
 
-        // ----------------------------------------------------
-        // DISABLE
-        // ----------------------------------------------------
+        .addSubcommand(sub =>
+            sub
+                .setName("test")
+                .setDescription("Send a real welcome test.")
+        )
 
-        .addSubcommand(subcommand =>
-            subcommand
+        .addSubcommand(sub =>
+            sub
                 .setName("disable")
-                .setDescription(
-                    "Disable the welcome system"
-                )
+                .setDescription("Disable the welcome system.")
+        ),
+
+    // ========================================================
+    // MODERATION
+    // ========================================================
+
+    new SlashCommandBuilder()
+        .setName("ban")
+        .setDescription("Ban a member.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("Member to ban.")
+                .setRequired(true)
         )
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription("Ban reason.")
+                .setRequired(false)
+        ),
 
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ManageGuild
-        );
+    new SlashCommandBuilder()
+        .setName("unban")
+        .setDescription("Unban a user.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+        .addStringOption(option =>
+            option
+                .setName("userid")
+                .setDescription("User ID.")
+                .setRequired(true)
+        ),
 
-// ============================================================
-// /PING
-// ============================================================
+    new SlashCommandBuilder()
+        .setName("kick")
+        .setDescription("Kick a member.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("Member to kick.")
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription("Kick reason.")
+                .setRequired(false)
+        ),
 
-const pingCommand =
+    new SlashCommandBuilder()
+        .setName("timeout")
+        .setDescription("Timeout a member.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("Member to timeout.")
+                .setRequired(true)
+        )
+        .addIntegerOption(option =>
+            option
+                .setName("minutes")
+                .setDescription("Timeout duration in minutes.")
+                .setRequired(true)
+                .setMinValue(1)
+                .setMaxValue(40320)
+        )
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription("Timeout reason.")
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("untimeout")
+        .setDescription("Remove a member's timeout.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("Member to untimeout.")
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("warn")
+        .setDescription("Warn a member.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("Member to warn.")
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription("Warning reason.")
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("warnings")
+        .setDescription("View a member's warnings.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("Member.")
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("clear")
+        .setDescription("Delete messages from a channel.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addIntegerOption(option =>
+            option
+                .setName("amount")
+                .setDescription("Number of messages.")
+                .setRequired(true)
+                .setMinValue(1)
+                .setMaxValue(100)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("slowmode")
+        .setDescription("Set channel slowmode.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+        .addIntegerOption(option =>
+            option
+                .setName("seconds")
+                .setDescription("Slowmode seconds. 0 disables it.")
+                .setRequired(true)
+                .setMinValue(0)
+                .setMaxValue(21600)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("lock")
+        .setDescription("Lock the current channel.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+
+    new SlashCommandBuilder()
+        .setName("unlock")
+        .setDescription("Unlock the current channel.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+
+    // ========================================================
+    // SERVER
+    // ========================================================
+
+    new SlashCommandBuilder()
+        .setName("serverinfo")
+        .setDescription("Display server information."),
+
+    new SlashCommandBuilder()
+        .setName("membercount")
+        .setDescription("Display the server member count."),
+
+    new SlashCommandBuilder()
+        .setName("userinfo")
+        .setDescription("Display user information.")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("User.")
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("roleinfo")
+        .setDescription("Display role information.")
+        .addRoleOption(option =>
+            option
+                .setName("role")
+                .setDescription("Role.")
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("channelinfo")
+        .setDescription("Display channel information.")
+        .addChannelOption(option =>
+            option
+                .setName("channel")
+                .setDescription("Channel.")
+                .setRequired(false)
+        ),
+
+    // ========================================================
+    // UTILITY
+    // ========================================================
+
     new SlashCommandBuilder()
         .setName("ping")
-        .setDescription(
-            "Check 27Pro latency"
-        );
+        .setDescription("Check 27Pro latency."),
 
-// ============================================================
-// /BOTINFO
-// ============================================================
-
-const botInfoCommand =
     new SlashCommandBuilder()
         .setName("botinfo")
-        .setDescription(
-            "Show 27Pro information"
-        );
+        .setDescription("Display 27Pro information."),
+
+    new SlashCommandBuilder()
+        .setName("avatar")
+        .setDescription("Show a user's avatar.")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("User.")
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("banner")
+        .setDescription("Show a user's banner.")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("User.")
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("say")
+        .setDescription("Make 27Pro send a message.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addStringOption(option =>
+            option
+                .setName("message")
+                .setDescription("Message to send.")
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("announce")
+        .setDescription("Send an announcement embed.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addStringOption(option =>
+            option
+                .setName("title")
+                .setDescription("Announcement title.")
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option
+                .setName("message")
+                .setDescription("Announcement message.")
+                .setRequired(true)
+        )
+        .addChannelOption(option =>
+            option
+                .setName("channel")
+                .setDescription("Announcement channel.")
+                .setRequired(false)
+                .addChannelTypes(ChannelType.GuildText)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("poll")
+        .setDescription("Create a yes/no poll.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addStringOption(option =>
+            option
+                .setName("question")
+                .setDescription("Poll question.")
+                .setRequired(true)
+        ),
+
+    // ========================================================
+    // ROLES
+    // ========================================================
+
+    new SlashCommandBuilder()
+        .setName("role")
+        .setDescription("Manage server roles.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+
+        .addSubcommand(sub =>
+            sub
+                .setName("add")
+                .setDescription("Give a role to a member.")
+                .addUserOption(option =>
+                    option
+                        .setName("user")
+                        .setDescription("Member.")
+                        .setRequired(true)
+                )
+                .addRoleOption(option =>
+                    option
+                        .setName("role")
+                        .setDescription("Role.")
+                        .setRequired(true)
+                )
+        )
+
+        .addSubcommand(sub =>
+            sub
+                .setName("remove")
+                .setDescription("Remove a role from a member.")
+                .addUserOption(option =>
+                    option
+                        .setName("user")
+                        .setDescription("Member.")
+                        .setRequired(true)
+                )
+                .addRoleOption(option =>
+                    option
+                        .setName("role")
+                        .setDescription("Role.")
+                        .setRequired(true)
+                )
+        )
+
+        .addSubcommand(sub =>
+            sub
+                .setName("create")
+                .setDescription("Create a role.")
+                .addStringOption(option =>
+                    option
+                        .setName("name")
+                        .setDescription("Role name.")
+                        .setRequired(true)
+                )
+        )
+
+        .addSubcommand(sub =>
+            sub
+                .setName("delete")
+                .setDescription("Delete a role.")
+                .addRoleOption(option =>
+                    option
+                        .setName("role")
+                        .setDescription("Role to delete.")
+                        .setRequired(true)
+                )
+        ),
+
+    // ========================================================
+    // FUN
+    // ========================================================
+
+    new SlashCommandBuilder()
+        .setName("8ball")
+        .setDescription("Ask the magic 8-ball a question.")
+        .addStringOption(option =>
+            option
+                .setName("question")
+                .setDescription("Your question.")
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("coinflip")
+        .setDescription("Flip a coin."),
+
+    new SlashCommandBuilder()
+        .setName("roll")
+        .setDescription("Roll a dice.")
+        .addIntegerOption(option =>
+            option
+                .setName("sides")
+                .setDescription("Number of sides.")
+                .setRequired(false)
+                .setMinValue(2)
+                .setMaxValue(1000)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("choose")
+        .setDescription("Choose between options.")
+        .addStringOption(option =>
+            option
+                .setName("options")
+                .setDescription("Separate options using commas.")
+                .setRequired(true)
+        )
+
+].map(command => command.toJSON());
 
 // ============================================================
-// REGISTER SLASH COMMANDS
+// REGISTER COMMANDS
 // ============================================================
 
 async function registerCommands() {
+    if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
+        console.error("❌ Cannot register commands. Missing credentials.");
+        return;
+    }
+
     try {
-        if (!TOKEN) {
-            throw new Error("TOKEN is missing");
-        }
+        const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-        if (!CLIENT_ID) {
-            throw new Error("CLIENT_ID is missing");
-        }
-
-        if (!GUILD_ID) {
-            throw new Error("GUILD_ID is missing");
-        }
-
-        const rest = new REST({
-            version: "10"
-        }).setToken(TOKEN);
+        console.log("🔄 Registering 27Pro slash commands...");
 
         await rest.put(
             Routes.applicationGuildCommands(
@@ -405,732 +832,258 @@ async function registerCommands() {
                 GUILD_ID
             ),
             {
-                body: [
-                    welcomeCommand.toJSON(),
-                    pingCommand.toJSON(),
-                    botInfoCommand.toJSON()
-                ]
+                body: commands
             }
         );
 
         console.log(
-            "✅ 27Pro slash commands registered."
-        );
-    } catch (error) {
-        console.error(
-            "❌ Command registration failed:"
+            `✅ Registered ${commands.length} slash commands.`
         );
 
-        console.error(error.message);
+    } catch (error) {
+        console.error("❌ Command registration failed:");
+        console.error(error);
     }
 }
 
 // ============================================================
-// BOT READY
+// READY
 // ============================================================
 
 client.once("ready", async () => {
-    console.log("");
-    console.log("======================================");
-    console.log("          27PRO BOT ONLINE");
-    console.log("======================================");
-
-    console.log(
-        `🤖 Bot: ${client.user.tag}`
-    );
-
-    console.log(
-        `🆔 ID: ${client.user.id}`
-    );
-
-    console.log(
-        `🏠 Servers: ${client.guilds.cache.size}`
-    );
-
-    console.log(
-        `👥 Users: ${client.guilds.cache.reduce(
-            (total, guild) =>
-                total + guild.memberCount,
-            0
-        )}`
-    );
-
-    console.log(
-        `📡 Ping: ${client.ws.ping}ms`
-    );
-
-    console.log("======================================");
-    console.log("");
-
-    await registerCommands();
+    console.log("==========================================");
+    console.log(`🤖 ${BOT_NAME} is online!`);
+    console.log(`👤 Logged in as ${client.user.tag}`);
+    console.log(`🏠 Guilds: ${client.guilds.cache.size}`);
+    console.log(`📡 Ping: ${client.ws.ping}ms`);
+    console.log("==========================================");
 
     client.user.setPresence({
         activities: [
             {
                 name: "your server",
-                type: ActivityType.Watching
+                type: 3
             }
         ],
         status: "online"
     });
+
+    await registerCommands();
 });
 
 // ============================================================
-// INTERACTIONS
+// INTERACTION HANDLER
 // ============================================================
 
-client.on(
-    "interactionCreate",
-    async interaction => {
+client.on("interactionCreate", async interaction => {
 
-        // ====================================================
-        // PING
-        // ====================================================
+    console.log(
+        `📥 Interaction: ${interaction.commandName || "unknown"} | ${interaction.user.tag}`
+    );
 
-        if (
-            interaction.isChatInputCommand() &&
-            interaction.commandName === "ping"
-        ) {
+    if (!interaction.isChatInputCommand()) {
+        return;
+    }
 
+    try {
+
+        if (!isGuildInteraction(interaction)) {
             await interaction.reply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setTitle("🏓 Pong!")
-                        .setDescription(
-                            `27Pro WebSocket latency: **${client.ws.ping}ms**`
-                        )
-                        .setColor(0x8B0000)
-                        .setFooter({
-                            text: "27Pro"
-                        })
-                        .setTimestamp()
-                ],
+                content: "❌ This command can only be used inside a server.",
                 ephemeral: true
             });
 
             return;
         }
 
-        // ====================================================
-        // BOTINFO
-        // ====================================================
-
-        if (
-            interaction.isChatInputCommand() &&
-            interaction.commandName === "botinfo"
-        ) {
-
-            const uptime =
-                Math.floor(process.uptime());
-
-            const hours =
-                Math.floor(uptime / 3600);
-
-            const minutes =
-                Math.floor(
-                    (uptime % 3600) / 60
-                );
-
-            const seconds =
-                uptime % 60;
-
-            const totalUsers =
-                client.guilds.cache.reduce(
-                    (total, guild) =>
-                        total + guild.memberCount,
-                    0
-                );
-
-            const embed =
-                new EmbedBuilder()
-                    .setTitle("🤖 27Pro")
-                    .setDescription(
-                        "All-in-one Discord welcome & utility bot."
-                    )
-                    .setColor(0x8B0000)
-                    .addFields(
-                        {
-                            name: "🏠 Servers",
-                            value:
-                                `${client.guilds.cache.size}`,
-                            inline: true
-                        },
-                        {
-                            name: "👥 Users",
-                            value:
-                                `${totalUsers}`,
-                            inline: true
-                        },
-                        {
-                            name: "📡 Ping",
-                            value:
-                                `${client.ws.ping}ms`,
-                            inline: true
-                        },
-                        {
-                            name: "⏱️ Uptime",
-                            value:
-                                `${hours}h ${minutes}m ${seconds}s`,
-                            inline: true
-                        },
-                        {
-                            name: "💾 Database",
-                            value:
-                                mongoose.connection
-                                    .readyState === 1
-                                    ? "🟢 Connected"
-                                    : "🔴 Disconnected",
-                            inline: true
-                        },
-                        {
-                            name: "⚡ Runtime",
-                            value:
-                                "Hostinger Node.js",
-                            inline: true
-                        }
-                    )
-                    .setFooter({
-                        text:
-                            "27Pro • Made by iik27"
-                    })
-                    .setTimestamp();
-
-            await interaction.reply({
-                embeds: [embed],
-                ephemeral: true
-            });
-
-            return;
-        }
+        const command = interaction.commandName;
 
         // ====================================================
-        // ONLY HANDLE /WELCOME BELOW
+        // WELCOME
         // ====================================================
 
-        if (
-            !interaction.isChatInputCommand() ||
-            interaction.commandName !== "welcome"
-        ) {
-            return;
-        }
+        if (command === "welcome") {
 
-        // ====================================================
-        // IMMEDIATE DISCORD ACK
-        // ====================================================
-
-        try {
+            // ACKNOWLEDGE IMMEDIATELY
             await interaction.deferReply({
                 ephemeral: true
             });
-        } catch (error) {
-            console.error(
-                "❌ Interaction acknowledgement failed:",
-                error.message
-            );
 
-            return;
-        }
+            const subcommand =
+                interaction.options.getSubcommand();
 
-        // ====================================================
-        // SERVER CHECK
-        // ====================================================
+            if (subcommand === "setup") {
 
-        if (!interaction.guild) {
+                const channel =
+                    interaction.options.getChannel("channel");
 
-            await interaction.editReply({
-                content:
-                    "❌ This command can only be used inside a server."
-            });
+                const role =
+                    interaction.options.getRole("role");
 
-            return;
-        }
+                const image =
+                    interaction.options.getString("image");
 
-        // ====================================================
-        // PERMISSION CHECK
-        // ====================================================
-
-        if (
-            !interaction.memberPermissions?.has(
-                PermissionFlagsBits.ManageGuild
-            )
-        ) {
-
-            await interaction.editReply({
-                content:
-                    "❌ You need the **Manage Server** permission."
-            });
-
-            return;
-        }
-
-        const subcommand =
-            interaction.options.getSubcommand();
-
-        // ====================================================
-        // SETUP
-        // ====================================================
-
-        if (
-            subcommand === "setup"
-        ) {
-
-            const channel =
-                interaction.options.getChannel(
-                    "channel"
-                );
-
-            const role =
-                interaction.options.getRole(
-                    "role"
-                );
-
-            const image =
-                interaction.options.getString(
-                    "image"
-                );
-
-            const message =
-                interaction.options.getString(
-                    "message"
-                );
-
-            const color =
-                interaction.options.getString(
-                    "color"
-                ) || "#8B0000";
-
-            // ------------------------------------------------
-            // IMAGE VALIDATION
-            // ------------------------------------------------
-
-            try {
-
-                const url =
-                    new URL(image);
-
-                if (
-                    url.protocol !== "http:" &&
-                    url.protocol !== "https:"
-                ) {
-                    throw new Error();
-                }
-
-            } catch {
-
-                await interaction.editReply({
-                    content:
-                        "❌ Please provide a valid HTTP/HTTPS image URL."
-                });
-
-                return;
-            }
-
-            // ------------------------------------------------
-            // COLOR VALIDATION
-            // ------------------------------------------------
-
-            if (
-                !/^#[0-9A-Fa-f]{6}$/.test(color)
-            ) {
-
-                await interaction.editReply({
-                    content:
-                        "❌ Color must look like `#8B0000`."
-                });
-
-                return;
-            }
-
-            // ------------------------------------------------
-            // BOT MEMBER
-            // ------------------------------------------------
-
-            const botMember =
-                interaction.guild.members.me;
-
-            if (!botMember) {
-
-                await interaction.editReply({
-                    content:
-                        "❌ I couldn't find 27Pro in this server."
-                });
-
-                return;
-            }
-
-            // ------------------------------------------------
-            // ROLE VALIDATION
-            // ------------------------------------------------
-
-            if (
-                role.id === interaction.guild.id
-            ) {
-
-                await interaction.editReply({
-                    content:
-                        "❌ You cannot use @everyone as the welcome role."
-                });
-
-                return;
-            }
-
-            if (role.managed) {
-
-                await interaction.editReply({
-                    content:
-                        "❌ That role is managed by an integration and cannot be assigned."
-                });
-
-                return;
-            }
-
-            if (
-                role.position >=
-                botMember.roles.highest.position
-            ) {
-
-                await interaction.editReply({
-                    content:
-                        "❌ 27Pro's bot role must be **above** the welcome role."
-                });
-
-                return;
-            }
-
-            // ------------------------------------------------
-            // CHANNEL PERMISSIONS
-            // ------------------------------------------------
-
-            const permissions =
-                channel.permissionsFor(
-                    botMember
-                );
-
-            if (
-                !permissions?.has(
-                    [
-                        PermissionFlagsBits.ViewChannel,
-                        PermissionFlagsBits.SendMessages,
-                        PermissionFlagsBits.EmbedLinks
-                    ]
-                )
-            ) {
-
-                await interaction.editReply({
-                    content:
-                        "❌ 27Pro needs **View Channel**, **Send Messages**, and **Embed Links** permissions in that channel."
-                });
-
-                return;
-            }
-
-            // ------------------------------------------------
-            // SAVE CONFIGURATION
-            // ------------------------------------------------
-
-            try {
-
-                await WelcomeConfig.findOneAndUpdate(
-                    {
-                        guildId:
-                            interaction.guild.id
-                    },
-                    {
-                        guildId:
-                            interaction.guild.id,
-
-                        enabled:
-                            true,
-
-                        channelId:
-                            channel.id,
-
-                        roleId:
-                            role.id,
-
-                        image:
-                            image,
-
-                        message:
-                            message,
-
-                        color:
-                            color
-                    },
-                    {
-                        upsert:
-                            true,
-
-                        new:
-                            true
-                    }
-                );
-
-                const embed =
-                    new EmbedBuilder()
-                        .setTitle(
-                            "✅ 27Pro Welcome System Enabled"
-                        )
-                        .setDescription(
-                            "Everything is configured and ready."
-                        )
-                        .setColor(
-                            getColor(color)
-                        )
-                        .addFields(
-                            {
-                                name:
-                                    "📢 Channel",
-                                value:
-                                    `<#${channel.id}>`,
-                                inline:
-                                    true
-                            },
-                            {
-                                name:
-                                    "🎭 Auto Role",
-                                value:
-                                    `<@&${role.id}>`,
-                                inline:
-                                    true
-                            },
-                            {
-                                name:
-                                    "🎨 Color",
-                                value:
-                                    color,
-                                inline:
-                                    true
-                            },
-                            {
-                                name:
-                                    "💬 Message",
-                                value:
-                                    message
-                            }
-                        )
-                        .setFooter({
-                            text:
-                                "27Pro • Welcome System"
-                        })
-                        .setTimestamp();
-
-                await interaction.editReply({
-                    embeds: [embed]
-                });
-
-                console.log(
-                    `✅ Welcome configured for ${interaction.guild.name}`
-                );
-
-            } catch (error) {
-
-                console.error(
-                    "❌ Welcome setup error:",
-                    error
-                );
-
-                await interaction.editReply({
-                    content:
-                        "❌ Database error while saving the configuration."
-                });
-            }
-
-            return;
-        }
-
-        // ====================================================
-        // CONFIG
-        // ====================================================
-
-        if (
-            subcommand === "config"
-        ) {
-
-            try {
+                const message =
+                    interaction.options.getString("message");
 
                 const config =
-                    await WelcomeConfig.findOne({
-                        guildId:
-                            interaction.guild.id
-                    });
-
-                if (
-                    !config ||
-                    !config.enabled
-                ) {
-
-                    await interaction.editReply({
-                        content:
-                            "❌ The 27Pro welcome system is currently disabled."
-                    });
-
-                    return;
-                }
-
-                const embed =
-                    new EmbedBuilder()
-                        .setTitle(
-                            "⚙️ 27Pro Welcome Configuration"
-                        )
-                        .setColor(
-                            getColor(config.color)
-                        )
-                        .addFields(
-                            {
-                                name:
-                                    "Status",
-                                value:
-                                    "🟢 Enabled",
-                                inline:
-                                    true
-                            },
-                            {
-                                name:
-                                    "Channel",
-                                value:
-                                    `<#${config.channelId}>`,
-                                inline:
-                                    true
-                            },
-                            {
-                                name:
-                                    "Role",
-                                value:
-                                    `<@&${config.roleId}>`,
-                                inline:
-                                    true
-                            },
-                            {
-                                name:
-                                    "Color",
-                                value:
-                                    config.color ||
-                                    "#8B0000",
-                                inline:
-                                    true
-                            },
-                            {
-                                name:
-                                    "Message",
-                                value:
-                                    config.message ||
-                                    "Not configured"
-                            }
-                        )
-                        .setFooter({
-                            text:
-                                "27Pro • Welcome System"
-                        })
-                        .setTimestamp();
-
-                if (config.image) {
-                    embed.setImage(
-                        config.image
-                    );
-                }
-
-                await interaction.editReply({
-                    embeds: [embed]
-                });
-
-            } catch (error) {
-
-                console.error(
-                    "❌ Config error:",
-                    error
-                );
-
-                await interaction.editReply({
-                    content:
-                        "❌ Failed to load the configuration."
-                });
-            }
-
-            return;
-        }
-
-        // ====================================================
-        // PREVIEW
-        // ====================================================
-
-        if (
-            subcommand === "preview"
-        ) {
-
-            try {
-
-                const config =
-                    await WelcomeConfig.findOne({
-                        guildId:
-                            interaction.guild.id
-                    });
-
-                if (
-                    !config ||
-                    !config.enabled
-                ) {
-
-                    await interaction.editReply({
-                        content:
-                            "❌ Configure the 27Pro welcome system first."
-                    });
-
-                    return;
-                }
-
-                const embed =
-                    createWelcomeEmbed(
-                        config,
-                        interaction.member
+                    await WelcomeConfig.findOneAndUpdate(
+                        {
+                            guildId: interaction.guildId
+                        },
+                        {
+                            guildId: interaction.guildId,
+                            enabled: true,
+                            channelId: channel.id,
+                            roleId: role ? role.id : null,
+                            image: image || null,
+                            message:
+                                message ||
+                                DEFAULT_WELCOME_MESSAGE
+                        },
+                        {
+                            upsert: true,
+                            new: true
+                        }
                     );
 
                 await interaction.editReply({
                     content:
-                        "👀 **27Pro Welcome Preview**",
-                    embeds: [embed]
+                        `✅ **27Pro Welcome System Configured**\n\n` +
+                        `**Channel:** ${getChannelMention(channel)}\n` +
+                        `**Role:** ${getRoleMention(role)}\n` +
+                        `**Image:** ${config.image || "None"}\n` +
+                        `**Message:** ${config.message}`
                 });
 
-            } catch (error) {
-
-                console.error(
-                    "❌ Preview error:",
-                    error
-                );
-
-                await interaction.editReply({
-                    content:
-                        "❌ Failed to create the preview."
-                });
+                return;
             }
 
-            return;
-        }
-
-        // ====================================================
-        // TEST
-        // ====================================================
-
-        if (
-            subcommand === "test"
-        ) {
-
-            try {
+            if (subcommand === "config") {
 
                 const config =
                     await WelcomeConfig.findOne({
-                        guildId:
-                            interaction.guild.id,
-
-                        enabled:
-                            true
+                        guildId: interaction.guildId
                     });
 
                 if (!config) {
-
                     await interaction.editReply({
                         content:
-                            "❌ Configure the 27Pro welcome system first."
+                            "❌ The welcome system has not been configured yet."
+                    });
+
+                    return;
+                }
+
+                const channel =
+                    interaction.guild.channels.cache.get(
+                        config.channelId
+                    );
+
+                const role =
+                    config.roleId
+                        ? interaction.guild.roles.cache.get(
+                              config.roleId
+                          )
+                        : null;
+
+                const embed = createBaseEmbed()
+                    .setTitle("👋 27Pro Welcome Configuration")
+                    .addFields(
+                        {
+                            name: "Status",
+                            value: config.enabled
+                                ? "🟢 Enabled"
+                                : "🔴 Disabled",
+                            inline: true
+                        },
+                        {
+                            name: "Channel",
+                            value:
+                                getChannelMention(channel),
+                            inline: true
+                        },
+                        {
+                            name: "Role",
+                            value:
+                                getRoleMention(role),
+                            inline: true
+                        },
+                        {
+                            name: "Message",
+                            value:
+                                config.message ||
+                                DEFAULT_WELCOME_MESSAGE
+                        }
+                    );
+
+                if (config.image) {
+                    embed.setImage(config.image);
+                }
+
+                await interaction.editReply({
+                    embeds: [embed]
+                });
+
+                return;
+            }
+
+            if (subcommand === "preview") {
+
+                const config =
+                    await WelcomeConfig.findOne({
+                        guildId: interaction.guildId
+                    });
+
+                if (!config) {
+                    await interaction.editReply({
+                        content:
+                            "❌ Configure the welcome system first with `/welcome setup`."
+                    });
+
+                    return;
+                }
+
+                const fakeMember = interaction.member;
+
+                const welcomeText =
+                    replaceVariables(
+                        config.message,
+                        fakeMember
+                    );
+
+                const embed = createBaseEmbed()
+                    .setTitle("👋 Welcome to " + interaction.guild.name)
+                    .setDescription(welcomeText)
+                    .setThumbnail(
+                        fakeMember.user.displayAvatarURL({
+                            size: 256
+                        })
+                    );
+
+                if (config.image) {
+                    embed.setImage(config.image);
+                }
+
+                await interaction.editReply({
+                    content: "Preview:",
+                    embeds: [embed]
+                });
+
+                return;
+            }
+
+            if (subcommand === "test") {
+
+                const config =
+                    await WelcomeConfig.findOne({
+                        guildId: interaction.guildId
+                    });
+
+                if (!config || !config.channelId) {
+                    await interaction.editReply({
+                        content:
+                            "❌ Configure the welcome system first."
                     });
 
                     return;
@@ -1142,7 +1095,6 @@ client.on(
                     );
 
                 if (!channel) {
-
                     await interaction.editReply({
                         content:
                             "❌ The configured welcome channel no longer exists."
@@ -1151,33 +1103,156 @@ client.on(
                     return;
                 }
 
-                const embed =
-                    createWelcomeEmbed(
-                        config,
+                const welcomeText =
+                    replaceVariables(
+                        config.message,
                         interaction.member
                     );
 
+                const embed = createBaseEmbed()
+                    .setTitle(
+                        "👋 Welcome to " +
+                        interaction.guild.name
+                    )
+                    .setDescription(welcomeText)
+                    .setThumbnail(
+                        interaction.user.displayAvatarURL({
+                            size: 256
+                        })
+                    );
+
+                if (config.image) {
+                    embed.setImage(config.image);
+                }
+
                 await channel.send({
                     content:
-                        `🧪 **27Pro Welcome Test**\n<@${interaction.user.id}>`,
+                        `<@${interaction.user.id}>`,
                     embeds: [embed]
                 });
 
                 await interaction.editReply({
                     content:
-                        `✅ Test message sent to <#${channel.id}>.`
+                        `✅ Test welcome sent to ${channel}.`
                 });
 
-            } catch (error) {
+                return;
+            }
 
-                console.error(
-                    "❌ Test error:",
-                    error
+            if (subcommand === "disable") {
+
+                await WelcomeConfig.findOneAndUpdate(
+                    {
+                        guildId: interaction.guildId
+                    },
+                    {
+                        enabled: false
+                    },
+                    {
+                        upsert: true
+                    }
                 );
 
                 await interaction.editReply({
                     content:
-                        "❌ Failed to send the test message."
+                        "🔴 27Pro welcome system has been disabled."
+                });
+
+                return;
+            }
+        }
+
+        // ====================================================
+        // BAN
+        // ====================================================
+
+        if (command === "ban") {
+
+            const user =
+                interaction.options.getUser("user");
+
+            const reason =
+                interaction.options.getString("reason") ||
+                "No reason provided";
+
+            const member =
+                await interaction.guild.members
+                    .fetch(user.id)
+                    .catch(() => null);
+
+            const check =
+                canModerateMember(
+                    interaction,
+                    member
+                );
+
+            if (!check.allowed) {
+                await interaction.reply({
+                    content: `❌ ${check.reason}`,
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            await member.ban({
+                reason
+            });
+
+            const embed = createBaseEmbed()
+                .setTitle("🔨 Member Banned")
+                .addFields(
+                    {
+                        name: "User",
+                        value: `${user.tag}`,
+                        inline: true
+                    },
+                    {
+                        name: "Moderator",
+                        value: `${interaction.user}`,
+                        inline: true
+                    },
+                    {
+                        name: "Reason",
+                        value: reason
+                    }
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // UNBAN
+        // ====================================================
+
+        if (command === "unban") {
+
+            const userId =
+                interaction.options.getString("userid");
+
+            try {
+
+                const user =
+                    await interaction.guild.bans.fetch(userId);
+
+                await interaction.guild.members.unban(
+                    userId
+                );
+
+                await interaction.reply({
+                    content:
+                        `✅ **${user.user.tag}** has been unbanned.`
+                });
+
+            } catch {
+                await interaction.reply({
+                    content:
+                        "❌ I could not find a ban for that user ID.",
+                    ephemeral: true
                 });
             }
 
@@ -1185,310 +1260,1448 @@ client.on(
         }
 
         // ====================================================
-        // DISABLE
+        // KICK
         // ====================================================
 
-        if (
-            subcommand === "disable"
-        ) {
+        if (command === "kick") {
 
-            try {
+            const user =
+                interaction.options.getUser("user");
 
-                const config =
-                    await WelcomeConfig.findOneAndUpdate(
-                        {
-                            guildId:
-                                interaction.guild.id
-                        },
-                        {
-                            enabled:
-                                false
-                        },
-                        {
-                            new:
-                                true
-                        }
-                    );
+            const reason =
+                interaction.options.getString("reason") ||
+                "No reason provided";
 
-                if (!config) {
+            const member =
+                await interaction.guild.members
+                    .fetch(user.id)
+                    .catch(() => null);
 
-                    await interaction.editReply({
+            const check =
+                canModerateMember(
+                    interaction,
+                    member
+                );
+
+            if (!check.allowed) {
+                await interaction.reply({
+                    content: `❌ ${check.reason}`,
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            await member.kick(reason);
+
+            await interaction.reply({
+                content:
+                    `👢 **${user.tag}** has been kicked.\n**Reason:** ${reason}`
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // TIMEOUT
+        // ====================================================
+
+        if (command === "timeout") {
+
+            const user =
+                interaction.options.getUser("user");
+
+            const minutes =
+                interaction.options.getInteger("minutes");
+
+            const reason =
+                interaction.options.getString("reason") ||
+                "No reason provided";
+
+            const member =
+                await interaction.guild.members
+                    .fetch(user.id)
+                    .catch(() => null);
+
+            const check =
+                canModerateMember(
+                    interaction,
+                    member
+                );
+
+            if (!check.allowed) {
+                await interaction.reply({
+                    content: `❌ ${check.reason}`,
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            await member.timeout(
+                minutes * 60 * 1000,
+                reason
+            );
+
+            await interaction.reply({
+                content:
+                    `⏱️ **${user.tag}** has been timed out for **${minutes} minutes**.\n**Reason:** ${reason}`
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // UNTIMEOUT
+        // ====================================================
+
+        if (command === "untimeout") {
+
+            const user =
+                interaction.options.getUser("user");
+
+            const member =
+                await interaction.guild.members
+                    .fetch(user.id)
+                    .catch(() => null);
+
+            if (!member) {
+                await interaction.reply({
+                    content:
+                        "❌ Member not found.",
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            await member.timeout(null);
+
+            await interaction.reply({
+                content:
+                    `✅ Timeout removed from **${user.tag}**.`
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // WARN
+        // ====================================================
+
+        if (command === "warn") {
+
+            const user =
+                interaction.options.getUser("user");
+
+            const reason =
+                interaction.options.getString("reason") ||
+                "No reason provided";
+
+            const member =
+                await interaction.guild.members
+                    .fetch(user.id)
+                    .catch(() => null);
+
+            const check =
+                canModerateMember(
+                    interaction,
+                    member
+                );
+
+            if (!check.allowed) {
+                await interaction.reply({
+                    content: `❌ ${check.reason}`,
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            if (mongoose.connection.readyState !== 1) {
+                await interaction.reply({
+                    content:
+                        "❌ MongoDB is currently unavailable.",
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            await Warning.create({
+                guildId: interaction.guildId,
+                userId: user.id,
+                moderatorId: interaction.user.id,
+                reason
+            });
+
+            const count =
+                await Warning.countDocuments({
+                    guildId: interaction.guildId,
+                    userId: user.id
+                });
+
+            const embed = createBaseEmbed()
+                .setTitle("⚠️ Member Warned")
+                .setThumbnail(
+                    user.displayAvatarURL({
+                        size: 256
+                    })
+                )
+                .addFields(
+                    {
+                        name: "User",
+                        value: `${user}`,
+                        inline: true
+                    },
+                    {
+                        name: "Warnings",
+                        value: `${count}`,
+                        inline: true
+                    },
+                    {
+                        name: "Moderator",
+                        value: `${interaction.user}`,
+                        inline: true
+                    },
+                    {
+                        name: "Reason",
+                        value: reason
+                    }
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // WARNINGS
+        // ====================================================
+
+        if (command === "warnings") {
+
+            const user =
+                interaction.options.getUser("user");
+
+            if (mongoose.connection.readyState !== 1) {
+                await interaction.reply({
+                    content:
+                        "❌ MongoDB is currently unavailable.",
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            const warnings =
+                await Warning.find({
+                    guildId: interaction.guildId,
+                    userId: user.id
+                })
+                .sort({
+                    createdAt: -1
+                })
+                .limit(10);
+
+            if (!warnings.length) {
+                await interaction.reply({
+                    content:
+                        `✅ **${user.tag}** has no warnings.`
+                });
+
+                return;
+            }
+
+            const text = warnings
+                .map(
+                    (warning, index) =>
+                        `**${index + 1}.** ${warning.reason}\n` +
+                        `Moderator: <@${warning.moderatorId}>`
+                )
+                .join("\n\n");
+
+            const embed = createBaseEmbed()
+                .setTitle(`⚠️ Warnings — ${user.tag}`)
+                .setDescription(text)
+                .setFooter({
+                    text: `${BOT_FOOTER} • Showing latest 10`
+                });
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // CLEAR
+        // ====================================================
+
+        if (command === "clear") {
+
+            const amount =
+                interaction.options.getInteger("amount");
+
+            if (!interaction.channel.isTextBased()) {
+                await interaction.reply({
+                    content:
+                        "❌ This command cannot be used here.",
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            const deleted =
+                await interaction.channel.bulkDelete(
+                    amount,
+                    true
+                );
+
+            await interaction.reply({
+                content:
+                    `🧹 Deleted **${deleted.size}** messages.`,
+                ephemeral: true
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // SLOWMODE
+        // ====================================================
+
+        if (command === "slowmode") {
+
+            const seconds =
+                interaction.options.getInteger("seconds");
+
+            if (!interaction.channel.isTextBased()) {
+                await interaction.reply({
+                    content:
+                        "❌ This channel does not support slowmode.",
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            await interaction.channel.setRateLimitPerUser(
+                seconds
+            );
+
+            await interaction.reply({
+                content:
+                    seconds === 0
+                        ? "🚀 Slowmode disabled."
+                        : `🐢 Slowmode set to **${seconds} seconds**.`
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // LOCK
+        // ====================================================
+
+        if (command === "lock") {
+
+            await interaction.channel.permissionOverwrites.edit(
+                interaction.guild.roles.everyone,
+                {
+                    SendMessages: false
+                }
+            );
+
+            await interaction.reply({
+                content:
+                    "🔒 This channel has been locked."
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // UNLOCK
+        // ====================================================
+
+        if (command === "unlock") {
+
+            await interaction.channel.permissionOverwrites.edit(
+                interaction.guild.roles.everyone,
+                {
+                    SendMessages: null
+                }
+            );
+
+            await interaction.reply({
+                content:
+                    "🔓 This channel has been unlocked."
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // SERVER INFO
+        // ====================================================
+
+        if (command === "serverinfo") {
+
+            const guild = interaction.guild;
+
+            const embed = createBaseEmbed()
+                .setTitle(`🖥️ ${guild.name}`)
+                .setThumbnail(
+                    guild.iconURL({
+                        size: 256
+                    })
+                )
+                .addFields(
+                    {
+                        name: "Owner",
+                        value: `<@${guild.ownerId}>`,
+                        inline: true
+                    },
+                    {
+                        name: "Members",
+                        value: `${guild.memberCount}`,
+                        inline: true
+                    },
+                    {
+                        name: "Channels",
+                        value: `${guild.channels.cache.size}`,
+                        inline: true
+                    },
+                    {
+                        name: "Roles",
+                        value: `${guild.roles.cache.size}`,
+                        inline: true
+                    },
+                    {
+                        name: "Server ID",
+                        value: guild.id,
+                        inline: true
+                    },
+                    {
+                        name: "Created",
+                        value: `<t:${Math.floor(
+                            guild.createdTimestamp / 1000
+                        )}:F>`,
+                        inline: true
+                    }
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // MEMBER COUNT
+        // ====================================================
+
+        if (command === "membercount") {
+
+            const embed = createBaseEmbed()
+                .setTitle("👥 Server Members")
+                .setDescription(
+                    `This server currently has **${interaction.guild.memberCount}** members.`
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // USER INFO
+        // ====================================================
+
+        if (command === "userinfo") {
+
+            const user =
+                interaction.options.getUser("user") ||
+                interaction.user;
+
+            const member =
+                await interaction.guild.members
+                    .fetch(user.id)
+                    .catch(() => null);
+
+            const roles =
+                member
+                    ? member.roles.cache
+                        .filter(role => role.id !== interaction.guild.id)
+                        .map(role => role.toString())
+                        .join(", ")
+                    : "None";
+
+            const embed = createBaseEmbed()
+                .setTitle(`👤 ${user.tag}`)
+                .setThumbnail(
+                    user.displayAvatarURL({
+                        size: 512
+                    })
+                )
+                .addFields(
+                    {
+                        name: "Username",
+                        value: user.username,
+                        inline: true
+                    },
+                    {
+                        name: "User ID",
+                        value: user.id,
+                        inline: true
+                    },
+                    {
+                        name: "Account Created",
+                        value: `<t:${Math.floor(
+                            user.createdTimestamp / 1000
+                        )}:F>`,
+                        inline: true
+                    },
+                    {
+                        name: "Joined Server",
+                        value: member
+                            ? `<t:${Math.floor(
+                                member.joinedTimestamp / 1000
+                            )}:F>`
+                            : "Not in server",
+                        inline: true
+                    },
+                    {
+                        name: "Roles",
+                        value:
+                            roles || "None"
+                    }
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // ROLE INFO
+        // ====================================================
+
+        if (command === "roleinfo") {
+
+            const role =
+                interaction.options.getRole("role");
+
+            const embed = createBaseEmbed()
+                .setTitle(`🎭 ${role.name}`)
+                .addFields(
+                    {
+                        name: "Role ID",
+                        value: role.id,
+                        inline: true
+                    },
+                    {
+                        name: "Members",
+                        value: `${role.members.size}`,
+                        inline: true
+                    },
+                    {
+                        name: "Position",
+                        value: `${role.position}`,
+                        inline: true
+                    },
+                    {
+                        name: "Mentionable",
+                        value: role.mentionable
+                            ? "Yes"
+                            : "No",
+                        inline: true
+                    },
+                    {
+                        name: "Hoisted",
+                        value: role.hoist
+                            ? "Yes"
+                            : "No",
+                        inline: true
+                    }
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // CHANNEL INFO
+        // ====================================================
+
+        if (command === "channelinfo") {
+
+            const channel =
+                interaction.options.getChannel("channel") ||
+                interaction.channel;
+
+            const embed = createBaseEmbed()
+                .setTitle(`📺 ${channel.name}`)
+                .addFields(
+                    {
+                        name: "Channel ID",
+                        value: channel.id,
+                        inline: true
+                    },
+                    {
+                        name: "Type",
+                        value: `${channel.type}`,
+                        inline: true
+                    },
+                    {
+                        name: "Created",
+                        value: `<t:${Math.floor(
+                            channel.createdTimestamp / 1000
+                        )}:F>`,
+                        inline: true
+                    }
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // PING
+        // ====================================================
+
+        if (command === "ping") {
+
+            const start = Date.now();
+
+            await interaction.reply({
+                content: "🏓 Checking..."
+            });
+
+            const responseTime =
+                Date.now() - start;
+
+            await interaction.editReply({
+                content:
+                    `🏓 **Pong!**\n` +
+                    `API: **${client.ws.ping}ms**\n` +
+                    `Response: **${responseTime}ms**`
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // BOT INFO
+        // ====================================================
+
+        if (command === "botinfo") {
+
+            const embed = createBaseEmbed()
+                .setTitle("🤖 27Pro")
+                .setDescription(
+                    "A multipurpose Discord bot built for modern communities."
+                )
+                .addFields(
+                    {
+                        name: "Version",
+                        value: "1.0.0",
+                        inline: true
+                    },
+                    {
+                        name: "Servers",
+                        value: `${client.guilds.cache.size}`,
+                        inline: true
+                    },
+                    {
+                        name: "Uptime",
+                        value: formatDuration(
+                            process.uptime() * 1000
+                        ),
+                        inline: true
+                    },
+                    {
+                        name: "Latency",
+                        value: `${client.ws.ping}ms`,
+                        inline: true
+                    },
+                    {
+                        name: "Database",
+                        value:
+                            mongoose.connection.readyState === 1
+                                ? "🟢 Connected"
+                                : "🔴 Offline",
+                        inline: true
+                    }
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // AVATAR
+        // ====================================================
+
+        if (command === "avatar") {
+
+            const user =
+                interaction.options.getUser("user") ||
+                interaction.user;
+
+            const embed = createBaseEmbed()
+                .setTitle(`🖼️ ${user.tag}'s Avatar`)
+                .setImage(
+                    user.displayAvatarURL({
+                        size: 1024,
+                        extension: "png"
+                    })
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // BANNER
+        // ====================================================
+
+        if (command === "banner") {
+
+            const user =
+                interaction.options.getUser("user") ||
+                interaction.user;
+
+            const fullUser =
+                await client.users.fetch(
+                    user.id,
+                    {
+                        force: true
+                    }
+                );
+
+            if (!fullUser.banner) {
+                await interaction.reply({
+                    content:
+                        "❌ This user does not have a profile banner.",
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            const embed = createBaseEmbed()
+                .setTitle(`🖼️ ${user.tag}'s Banner`)
+                .setImage(
+                    fullUser.bannerURL({
+                        size: 1024
+                    })
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // SAY
+        // ====================================================
+
+        if (command === "say") {
+
+            const message =
+                interaction.options.getString("message");
+
+            await interaction.channel.send({
+                content: message
+            });
+
+            await interaction.reply({
+                content:
+                    "✅ Message sent.",
+                ephemeral: true
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // ANNOUNCE
+        // ====================================================
+
+        if (command === "announce") {
+
+            const title =
+                interaction.options.getString("title");
+
+            const message =
+                interaction.options.getString("message");
+
+            const channel =
+                interaction.options.getChannel("channel") ||
+                interaction.channel;
+
+            const embed = createBaseEmbed()
+                .setTitle(`📢 ${title}`)
+                .setDescription(message)
+                .setAuthor({
+                    name:
+                        interaction.guild.name,
+                    iconURL:
+                        interaction.guild.iconURL() ||
+                        undefined
+                });
+
+            await channel.send({
+                embeds: [embed]
+            });
+
+            await interaction.reply({
+                content:
+                    `✅ Announcement sent to ${channel}.`,
+                ephemeral: true
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // POLL
+        // ====================================================
+
+        if (command === "poll") {
+
+            const question =
+                interaction.options.getString("question");
+
+            const embed = createBaseEmbed()
+                .setTitle("📊 Poll")
+                .setDescription(
+                    `**${question}**\n\n` +
+                    "👍 Yes\n" +
+                    "👎 No"
+                )
+                .setFooter({
+                    text:
+                        `${BOT_FOOTER} • Poll`
+                });
+
+            const message =
+                await interaction.channel.send({
+                    embeds: [embed]
+                });
+
+            await message.react("👍");
+            await message.react("👎");
+
+            await interaction.reply({
+                content:
+                    "✅ Poll created.",
+                ephemeral: true
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // ROLE COMMAND
+        // ====================================================
+
+        if (command === "role") {
+
+            const subcommand =
+                interaction.options.getSubcommand();
+
+            const botMember =
+                interaction.guild.members.me;
+
+            // ----------------------------------------------
+            // ROLE ADD
+            // ----------------------------------------------
+
+            if (subcommand === "add") {
+
+                const user =
+                    interaction.options.getUser("user");
+
+                const role =
+                    interaction.options.getRole("role");
+
+                const member =
+                    await interaction.guild.members
+                        .fetch(user.id)
+                        .catch(() => null);
+
+                if (!member) {
+                    await interaction.reply({
                         content:
-                            "❌ No 27Pro welcome configuration exists for this server."
+                            "❌ Member not found.",
+                        ephemeral: true
                     });
 
                     return;
                 }
 
-                await interaction.editReply({
+                if (role.managed) {
+                    await interaction.reply({
+                        content:
+                            "❌ I cannot manage an integration/bot role.",
+                        ephemeral: true
+                    });
+
+                    return;
+                }
+
+                if (
+                    role.position >=
+                    botMember.roles.highest.position
+                ) {
+                    await interaction.reply({
+                        content:
+                            "❌ That role is above or equal to my highest role.",
+                        ephemeral: true
+                    });
+
+                    return;
+                }
+
+                await member.roles.add(role);
+
+                await interaction.reply({
                     content:
-                        "🔴 **27Pro Welcome System Disabled**\n\nNew members will no longer receive the automatic welcome message or role."
+                        `✅ Added ${role} to **${user.tag}**.`
                 });
-
-                console.log(
-                    `🔴 Welcome disabled for ${interaction.guild.name}`
-                );
-
-            } catch (error) {
-
-                console.error(
-                    "❌ Disable error:",
-                    error
-                );
-
-                await interaction.editReply({
-                    content:
-                        "❌ Failed to disable the welcome system."
-                });
-            }
-        }
-    }
-);
-
-// ============================================================
-// MEMBER JOIN
-// ============================================================
-
-client.on(
-    "guildMemberAdd",
-    async member => {
-
-        console.log(
-            `👤 MEMBER JOINED: ${member.user.tag} → ${member.guild.name}`
-        );
-
-        try {
-
-            const config =
-                await WelcomeConfig.findOne({
-                    guildId:
-                        member.guild.id,
-
-                    enabled:
-                        true
-                });
-
-            if (!config) {
-
-                console.log(
-                    "ℹ️ Welcome system is disabled/not configured."
-                );
 
                 return;
             }
 
-            // =================================================
-            // AUTOMATIC ROLE
-            // =================================================
+            // ----------------------------------------------
+            // ROLE REMOVE
+            // ----------------------------------------------
 
-            if (config.roleId) {
+            if (subcommand === "remove") {
 
-                try {
+                const user =
+                    interaction.options.getUser("user");
 
-                    const role =
-                        member.guild.roles.cache.get(
-                            config.roleId
-                        );
+                const role =
+                    interaction.options.getRole("role");
 
-                    if (!role) {
+                const member =
+                    await interaction.guild.members
+                        .fetch(user.id)
+                        .catch(() => null);
 
-                        console.log(
-                            "⚠️ Welcome role not found."
-                        );
+                if (!member) {
+                    await interaction.reply({
+                        content:
+                            "❌ Member not found.",
+                        ephemeral: true
+                    });
 
-                    } else if (role.managed) {
+                    return;
+                }
 
-                        console.log(
-                            "⚠️ Welcome role is managed."
-                        );
+                if (role.managed) {
+                    await interaction.reply({
+                        content:
+                            "❌ I cannot manage an integration/bot role.",
+                        ephemeral: true
+                    });
 
-                    } else {
+                    return;
+                }
+
+                if (
+                    role.position >=
+                    botMember.roles.highest.position
+                ) {
+                    await interaction.reply({
+                        content:
+                            "❌ That role is above or equal to my highest role.",
+                        ephemeral: true
+                    });
+
+                    return;
+                }
+
+                await member.roles.remove(role);
+
+                await interaction.reply({
+                    content:
+                        `✅ Removed ${role} from **${user.tag}**.`
+                });
+
+                return;
+            }
+
+            // ----------------------------------------------
+            // ROLE CREATE
+            // ----------------------------------------------
+
+            if (subcommand === "create") {
+
+                const name =
+                    interaction.options.getString("name");
+
+                const role =
+                    await interaction.guild.roles.create({
+                        name,
+                        reason:
+                            `Created by ${interaction.user.tag}`
+                    });
+
+                await interaction.reply({
+                    content:
+                        `✅ Created ${role}.`
+                });
+
+                return;
+            }
+
+            // ----------------------------------------------
+            // ROLE DELETE
+            // ----------------------------------------------
+
+            if (subcommand === "delete") {
+
+                const role =
+                    interaction.options.getRole("role");
+
+                if (role.managed) {
+                    await interaction.reply({
+                        content:
+                            "❌ I cannot delete a managed role.",
+                        ephemeral: true
+                    });
+
+                    return;
+                }
+
+                if (
+                    role.position >=
+                    botMember.roles.highest.position
+                ) {
+                    await interaction.reply({
+                        content:
+                            "❌ That role is above or equal to my highest role.",
+                        ephemeral: true
+                    });
+
+                    return;
+                }
+
+                await role.delete(
+                    `Deleted by ${interaction.user.tag}`
+                );
+
+                await interaction.reply({
+                    content:
+                        `🗑️ Role **${role.name}** deleted.`
+                });
+
+                return;
+            }
+        }
+
+        // ====================================================
+        // 8BALL
+        // ====================================================
+
+        if (command === "8ball") {
+
+            const answers = [
+                "Yes.",
+                "No.",
+                "Definitely.",
+                "Probably.",
+                "Probably not.",
+                "Absolutely not.",
+                "Without a doubt.",
+                "Ask again later.",
+                "The answer is unclear.",
+                "Maybe.",
+                "I wouldn't count on it."
+            ];
+
+            const answer =
+                answers[
+                    Math.floor(
+                        Math.random() * answers.length
+                    )
+                ];
+
+            const embed = createBaseEmbed()
+                .setTitle("🎱 Magic 8-Ball")
+                .addFields(
+                    {
+                        name: "Question",
+                        value:
+                            interaction.options.getString(
+                                "question"
+                            )
+                    },
+                    {
+                        name: "Answer",
+                        value: answer
+                    }
+                );
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // COINFLIP
+        // ====================================================
+
+        if (command === "coinflip") {
+
+            const result =
+                Math.random() < 0.5
+                    ? "Heads 🪙"
+                    : "Tails 🪙";
+
+            await interaction.reply({
+                content:
+                    `🪙 **${result}**`
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // ROLL
+        // ====================================================
+
+        if (command === "roll") {
+
+            const sides =
+                interaction.options.getInteger("sides") || 6;
+
+            const result =
+                Math.floor(
+                    Math.random() * sides
+                ) + 1;
+
+            await interaction.reply({
+                content:
+                    `🎲 You rolled **${result}** on a **d${sides}**.`
+            });
+
+            return;
+        }
+
+        // ====================================================
+        // CHOOSE
+        // ====================================================
+
+        if (command === "choose") {
+
+            const options =
+                interaction.options
+                    .getString("options")
+                    .split(",")
+                    .map(option => option.trim())
+                    .filter(Boolean);
+
+            if (options.length < 2) {
+                await interaction.reply({
+                    content:
+                        "❌ Give me at least two options separated by commas.",
+                    ephemeral: true
+                });
+
+                return;
+            }
+
+            const choice =
+                options[
+                    Math.floor(
+                        Math.random() * options.length
+                    )
+                ];
+
+            await interaction.reply({
+                content:
+                    `🎯 I choose: **${choice}**`
+            });
+
+            return;
+        }
+
+    } catch (error) {
+
+        console.error(
+            `❌ Command error [${interaction.commandName}]:`,
+            error
+        );
+
+        try {
+
+            if (interaction.deferred) {
+                await interaction.editReply({
+                    content:
+                        "❌ Something went wrong while executing this command."
+                });
+            } else if (!interaction.replied) {
+                await interaction.reply({
+                    content:
+                        "❌ Something went wrong while executing this command.",
+                    ephemeral: true
+                });
+            }
+
+        } catch (replyError) {
+            console.error(
+                "❌ Could not send error response:",
+                replyError
+            );
+        }
+    }
+});
+
+// ============================================================
+// WELCOME NEW MEMBERS
+// ============================================================
+
+client.on("guildMemberAdd", async member => {
+
+    console.log(
+        `👋 New member: ${member.user.tag} joined ${member.guild.name}`
+    );
+
+    try {
+
+        const config =
+            await WelcomeConfig.findOne({
+                guildId: member.guild.id
+            });
+
+        if (!config || !config.enabled) {
+            return;
+        }
+
+        let roleResult = "No role configured.";
+
+        // ====================================================
+        // AUTO ROLE
+        // ====================================================
+
+        if (config.roleId) {
+
+            const role =
+                member.guild.roles.cache.get(
+                    config.roleId
+                );
+
+            const botMember =
+                member.guild.members.me;
+
+            if (role && botMember) {
+
+                if (
+                    role.position <
+                    botMember.roles.highest.position
+                ) {
+
+                    try {
 
                         await member.roles.add(
                             role,
                             "27Pro automatic welcome role"
                         );
 
-                        console.log(
-                            `✅ ROLE GIVEN: ${role.name}`
+                        roleResult =
+                            `Role assigned: ${role.name}`;
+
+                    } catch (error) {
+
+                        console.error(
+                            "❌ Could not assign welcome role:",
+                            error.message
                         );
+
+                        roleResult =
+                            "Could not assign welcome role.";
                     }
 
-                } catch (error) {
+                } else {
 
-                    console.error(
-                        "❌ Failed to give role:",
-                        error.message
-                    );
+                    roleResult =
+                        "Welcome role is above 27Pro's role.";
                 }
             }
+        }
 
-            // =================================================
-            // WELCOME CHANNEL
-            // =================================================
+        // ====================================================
+        // WELCOME CHANNEL
+        // ====================================================
 
-            const channel =
-                member.guild.channels.cache.get(
-                    config.channelId
-                );
-
-            if (!channel) {
-
-                console.log(
-                    "⚠️ Welcome channel not found."
-                );
-
-                return;
-            }
-
-            // =================================================
-            // PERMISSIONS
-            // =================================================
-
-            const botMember =
-                member.guild.members.me;
-
-            if (botMember) {
-
-                const permissions =
-                    channel.permissionsFor(
-                        botMember
-                    );
-
-                if (
-                    !permissions?.has(
-                        [
-                            PermissionFlagsBits.ViewChannel,
-                            PermissionFlagsBits.SendMessages,
-                            PermissionFlagsBits.EmbedLinks
-                        ]
-                    )
-                ) {
-
-                    console.log(
-                        "❌ Missing permissions in welcome channel."
-                    );
-
-                    return;
-                }
-            }
-
-            // =================================================
-            // CREATE EMBED
-            // =================================================
-
-            const embed =
-                createWelcomeEmbed(
-                    config,
-                    member
-                );
-
-            // =================================================
-            // SEND
-            // =================================================
-
-            await channel.send({
-                content:
-                    `<@${member.id}>`,
-                embeds: [embed]
-            });
-
-            console.log(
-                "✅ 27PRO WELCOME MESSAGE SENT"
+        const channel =
+            member.guild.channels.cache.get(
+                config.channelId
             );
 
-        } catch (error) {
+        if (!channel || !channel.isTextBased()) {
 
             console.error(
-                "❌ Welcome event error:",
-                error
+                "❌ Welcome channel not found."
             );
+
+            return;
         }
+
+        const welcomeText =
+            replaceVariables(
+                config.message,
+                member
+            );
+
+        const embed = createBaseEmbed()
+            .setTitle(
+                `👋 Welcome to ${member.guild.name}`
+            )
+            .setDescription(welcomeText)
+            .setThumbnail(
+                member.user.displayAvatarURL({
+                    size: 512
+                })
+            )
+            .addFields(
+                {
+                    name: "👤 Member",
+                    value: `${member}`,
+                    inline: true
+                },
+                {
+                    name: "👥 Members",
+                    value:
+                        `${member.guild.memberCount}`,
+                    inline: true
+                }
+            );
+
+        if (config.image) {
+            embed.setImage(config.image);
+        }
+
+        await channel.send({
+            content:
+                `<@${member.id}>`,
+            embeds: [embed]
+        });
+
+        console.log(
+            `✅ Welcome sent for ${member.user.tag}`
+        );
+
+        console.log(
+            `🎭 ${roleResult}`
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ Welcome system error:",
+            error
+        );
     }
-);
+});
 
 // ============================================================
 // DISCORD ERRORS
 // ============================================================
 
-client.on(
-    "error",
-    error => {
-        console.error(
-            "❌ Discord error:",
-            error
-        );
-    }
-);
+client.on("error", error => {
+    console.error(
+        "❌ Discord client error:",
+        error
+    );
+});
 
-client.on(
-    "shardError",
-    error => {
-        console.error(
-            "❌ Discord WebSocket error:",
-            error
-        );
-    }
-);
+client.on("warn", warning => {
+    console.warn(
+        "⚠️ Discord warning:",
+        warning
+    );
+});
 
-client.on(
-    "warn",
-    warning => {
-        console.warn(
-            "⚠️ Discord warning:",
-            warning
-        );
-    }
-);
+client.on("shardError", error => {
+    console.error(
+        "❌ Discord shard error:",
+        error
+    );
+});
 
 // ============================================================
 // PROCESS ERRORS
 // ============================================================
 
-process.on(
-    "unhandledRejection",
-    error => {
-        console.error(
-            "❌ Unhandled Promise Rejection:",
-            error
-        );
-    }
-);
+process.on("unhandledRejection", error => {
+    console.error(
+        "❌ Unhandled promise rejection:",
+        error
+    );
+});
 
-process.on(
-    "uncaughtException",
-    error => {
-        console.error(
-            "❌ Uncaught Exception:",
-            error
-        );
-    }
-);
+process.on("uncaughtException", error => {
+    console.error(
+        "❌ Uncaught exception:",
+        error
+    );
+});
 
 // ============================================================
-// LOGIN
+// START BOT
 // ============================================================
 
 async function startBot() {
 
-    console.log(
-        "🔌 Connecting 27Pro to Discord..."
-    );
-
-    if (!TOKEN) {
-
-        console.error(
-            "❌ TOKEN is missing from Hostinger environment variables."
-        );
-
-        return;
-    }
-
     try {
 
-        await client.login(
-            TOKEN
+        await connectDatabase();
+
+        if (!TOKEN) {
+            console.error(
+                "❌ Bot cannot start without TOKEN."
+            );
+
+            return;
+        }
+
+        console.log(
+            "🔄 Connecting 27Pro to Discord..."
         );
+
+        await client.login(TOKEN);
 
     } catch (error) {
 
@@ -1497,14 +2710,9 @@ async function startBot() {
         );
 
         console.error(
-            error.message
+            error
         );
     }
 }
 
-// ============================================================
-// START
-// ============================================================
-
-connectDatabase();
 startBot();
