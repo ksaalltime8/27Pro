@@ -861,7 +861,7 @@ client.once("ready", async () => {
     client.user.setPresence({
         activities: [
             {
-                name: "your server",
+                name: "iik27 on top",
                 type: 3
             }
         ],
