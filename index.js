@@ -1770,32 +1770,59 @@ const commandJSON =
 // ============================================================
 
 async function registerCommands() {
+
     try {
+
         const rest = new REST({
             version: "10"
         }).setToken(TOKEN);
 
+        // Remove duplicate slash commands by name + type
+        const uniqueCommands = [];
+        const seenCommands = new Set();
+
+        for (const command of commands) {
+
+            const json = command.toJSON();
+
+            const key =
+                `${json.type || 1}:${json.name}`;
+
+            if (seenCommands.has(key)) {
+                console.warn(
+                    `[27Pro] Removed duplicate command: /${json.name}`
+                );
+
+                continue;
+            }
+
+            seenCommands.add(key);
+            uniqueCommands.push(json);
+        }
+
         console.log(
-            "🌍 Registering global slash commands..."
+            `[27Pro] Registering ${uniqueCommands.length} unique slash commands...`
         );
 
         await rest.put(
-            Routes.applicationCommands(
-                CLIENT_ID
-            ),
+            Routes.applicationCommands(CLIENT_ID),
             {
-                body: commandJSON
+                body: uniqueCommands
             }
         );
 
         console.log(
-            `✅ ${commandJSON.length} global commands registered.`
+            `[27Pro] Successfully registered ${uniqueCommands.length} global slash commands.`
         );
+
     } catch (error) {
+
         console.error(
-            "❌ Command registration failed:",
+            "[27Pro] Command registration error:",
             error
         );
+
+        throw error;
     }
 }
 
