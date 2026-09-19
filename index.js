@@ -7707,111 +7707,78 @@ client.on("interactionCreate", async interaction => {
             // CONFIG
             // ------------------------------------------------
 
-            if (
-                subcommand === "config"
-            ) {
+     if (subcommand === "config") {
 
-                return interaction.reply({
-                    embeds: [
-                        embed(0xff0000)
-                            .setTitle(
-                                "🚨 27Pro Security"
-                            )
-                            .addFields(
-                                {
-                                    name:
-                                        "System",
-                                    value:
-                                        config.enabled
-                                            ? "🟢 Enabled"
-                                            : "🔴 Disabled",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Anti-Raid",
-                                    value:
-                                        config.antiRaid
-                                            ? "🟢 On"
-                                            : "🔴 Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Anti-Nuke",
-                                    value:
-                                        config.antiNuke
-                                            ? "🟢 On"
-                                            : "🔴 Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Anti Bot Add",
-                                    value:
-                                        config.antiBotAdd
-                                            ? "🟢 On"
-                                            : "🔴 Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Channel Protection",
-                                    value:
-                                        config.antiChannelDelete
-                                            ? "🟢 On"
-                                            : "🔴 Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Role Protection",
-                                    value:
-                                        config.antiRoleDelete
-                                            ? "🟢 On"
-                                            : "🔴 Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Raid Mode",
-                                    value:
-                                        config.raidMode
-                                            ? "🚨 ACTIVE"
-                                            : "🟢 Normal",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Raid Threshold",
-                                    value:
-                                        String(
-                                            config.raidThreshold ||
-                                            5
-                                        ),
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Punishment",
-                                    value:
-                                        config.punishment ||
-                                        "timeout",
-                                    inline:
-                                        true
-                                }
-                            ]
-                    ]
-                });
-            }
+    return interaction.reply({
+        embeds: [
+            embed(0xff0000)
+                .setTitle("🚨 27Pro Security")
+                .addFields(
+                    {
+                        name: "System",
+                        value: config.enabled
+                            ? "🟢 Enabled"
+                            : "🔴 Disabled",
+                        inline: true
+                    },
+                    {
+                        name: "Anti-Raid",
+                        value: config.antiRaid
+                            ? "🟢 On"
+                            : "🔴 Off",
+                        inline: true
+                    },
+                    {
+                        name: "Anti-Nuke",
+                        value: config.antiNuke
+                            ? "🟢 On"
+                            : "🔴 Off",
+                        inline: true
+                    },
+                    {
+                        name: "Anti Bot Add",
+                        value: config.antiBotAdd
+                            ? "🟢 On"
+                            : "🔴 Off",
+                        inline: true
+                    },
+                    {
+                        name: "Channel Protection",
+                        value: config.antiChannelDelete
+                            ? "🟢 On"
+                            : "🔴 Off",
+                        inline: true
+                    },
+                    {
+                        name: "Role Protection",
+                        value: config.antiRoleDelete
+                            ? "🟢 On"
+                            : "🔴 Off",
+                        inline: true
+                    },
+                    {
+                        name: "Raid Mode",
+                        value: config.raidMode
+                            ? "🚨 ACTIVE"
+                            : "🟢 Normal",
+                        inline: true
+                    },
+                    {
+                        name: "Raid Threshold",
+                        value: String(
+                            config.raidThreshold || 5
+                        ),
+                        inline: true
+                    },
+                    {
+                        name: "Punishment",
+                        value: config.punishment || "timeout",
+                        inline: true
+                    }
+                )
+        ]
+    });
+}
 
             // ------------------------------------------------
             // RAIDMODE
