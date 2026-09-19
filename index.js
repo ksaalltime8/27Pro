@@ -7380,102 +7380,71 @@ client.on("interactionCreate", async interaction => {
             // CONFIG
             // ------------------------------------------------
 
-            if (
-                subcommand === "config"
-            ) {
+         if (subcommand === "config") {
 
-                return interaction.reply({
-                    embeds: [
-                        embed(0x5865f2)
-                            .setTitle(
-                                "🛡️ AutoMod Configuration"
-                            )
-                            .addFields(
-                                {
-                                    name:
-                                        "Enabled",
-                                    value:
-                                        config.enabled
-                                            ? "✅ Yes"
-                                            : "❌ No",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Invite Filter",
-                                    value:
-                                        config.antiInvite
-                                            ? "✅ On"
-                                            : "❌ Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Spam Protection",
-                                    value:
-                                        config.antiSpam
-                                            ? "✅ On"
-                                            : "❌ Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Caps Protection",
-                                    value:
-                                        config.antiCaps
-                                            ? "✅ On"
-                                            : "❌ Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Mention Protection",
-                                    value:
-                                        config.antiMentionSpam
-                                            ? "✅ On"
-                                            : "❌ Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Max Mentions",
-                                    value:
-                                        String(
-                                            config.maxMentions ||
-                                            5
-                                        ),
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Duplicate Messages",
-                                    value:
-                                        config.duplicateFilter
-                                            ? "✅ On"
-                                            : "❌ Off",
-                                    inline:
-                                        true
-                                },
-                                {
-                                    name:
-                                        "Punishment",
-                                    value:
-                                        config.punishment ||
-                                        "delete",
-                                    inline:
-                                        true
-                                }
-                            ]
-                    ]
-                });
-            }
-
+    return interaction.reply({
+        embeds: [
+            embed(0x5865f2)
+                .setTitle("🛡️ AutoMod Configuration")
+                .addFields(
+                    {
+                        name: "Enabled",
+                        value: config.enabled
+                            ? "✅ Yes"
+                            : "❌ No",
+                        inline: true
+                    },
+                    {
+                        name: "Invite Filter",
+                        value: config.antiInvite
+                            ? "✅ On"
+                            : "❌ Off",
+                        inline: true
+                    },
+                    {
+                        name: "Spam Protection",
+                        value: config.antiSpam
+                            ? "✅ On"
+                            : "❌ Off",
+                        inline: true
+                    },
+                    {
+                        name: "Caps Protection",
+                        value: config.antiCaps
+                            ? "✅ On"
+                            : "❌ Off",
+                        inline: true
+                    },
+                    {
+                        name: "Mention Protection",
+                        value: config.antiMentionSpam
+                            ? "✅ On"
+                            : "❌ Off",
+                        inline: true
+                    },
+                    {
+                        name: "Max Mentions",
+                        value: String(
+                            config.maxMentions || 5
+                        ),
+                        inline: true
+                    },
+                    {
+                        name: "Duplicate Messages",
+                        value: config.duplicateFilter
+                            ? "✅ On"
+                            : "❌ Off",
+                        inline: true
+                    },
+                    {
+                        name: "Punishment",
+                        value: config.punishment || "delete",
+                        inline: true
+                    }
+                )
+        ]
+    });
+}
             // ------------------------------------------------
             // PUNISHMENT
             // ------------------------------------------------
