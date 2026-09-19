@@ -6979,2349 +6979,3417 @@ client.on(
 
 // ============================================================
 // 27PRO - PART 4/4
-// REMAINING COMMANDS + STARTUP + HEALTH + SHUTDOWN
+// CORRECTED FINAL PART
 // ============================================================
 
 // ============================================================
-// CONTINUE THE EXISTING interactionCreate HANDLER
+// SECOND INTERACTION HANDLER
+// ============================================================
+// Part 3 already closed its interactionCreate handler.
+// This handler safely handles the remaining commands.
 // ============================================================
 
-// IMPORTANT:
-// This section is intended to be inserted BEFORE the final
-// closing braces of the interactionCreate handler from Part 3.
-//
-// If you already pasted the Part 3 ending:
-//
-//     // END OF PART 3
-//     } catch (error) {
-//         ...
-//     }
-// });
-//
-// remove that ending temporarily, paste the command section
-// below, then restore the final handler closing section shown
-// at the bottom of this file.
+client.on("interactionCreate", async interaction => {
 
-// ============================================================
-// LOGGING COMMANDS
-// ============================================================
-
-// NOTE:
-// These commands are registered globally from Part 1.
-
-// ------------------------------------------------------------
-// /logs
-// ------------------------------------------------------------
-
-if (command === "logs") {
-    const sub =
-        interaction.options.getSubcommand();
-
-    if (
-        !interaction.memberPermissions.has(
-            PermissionFlagsBits.ManageGuild
-        )
-    ) {
-        return interaction.reply({
-            content:
-                "❌ You need Manage Server.",
-            flags:
-                MessageFlags.Ephemeral
-        });
+    if (!interaction.isChatInputCommand()) {
+        return;
     }
 
-    // --------------------------------------------------------
-    // SETUP
-    // --------------------------------------------------------
+    const command =
+        interaction.commandName;
 
-    if (sub === "setup") {
-        const type =
-            interaction.options.getString(
-                "type"
-            );
+    try {
 
-        const channel =
-            interaction.options.getChannel(
-                "channel"
-            );
+        // ====================================================
+        // LOGS
+        // ====================================================
 
-        await LogConfig.findOneAndUpdate(
-            {
-                guildId:
-                    interaction.guild.id,
-                type
-            },
-            {
-                guildId:
-                    interaction.guild.id,
-                type,
-                channelId:
-                    channel.id,
-                enabled: true
-            },
-            {
-                upsert: true,
-                new: true
+        if (command === "logs") {
+
+            const subcommand =
+                interaction.options.getSubcommand();
+
+            if (
+                !interaction.memberPermissions.has(
+                    PermissionFlagsBits.ManageGuild
+                )
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ You need **Manage Server** permission.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
             }
-        );
 
-        return interaction.reply({
-            content:
-                `✅ **${type}** logs are now sent to ${channel}.`
-        });
-    }
-
-    // --------------------------------------------------------
-    // CONFIG
-    // --------------------------------------------------------
-
-    if (sub === "config") {
-        const configs =
-            await LogConfig.find({
-                guildId:
-                    interaction.guild.id
-            });
-
-        if (!configs.length) {
-            return interaction.reply({
-                content:
-                    "❌ No logging systems are configured."
-            });
-        }
-
-        const text =
-            configs
-                .map(
-                    config =>
-                        `**${config.type}** → ${
-                            config.enabled
-                                ? `<#${config.channelId}>`
-                                : "Disabled"
-                        }`
-                )
-                .join("\n");
-
-        return interaction.reply({
-            embeds: [
-                embed(0x5865f2)
-                    .setTitle(
-                        "📋 Logging Configuration"
-                    )
-                    .setDescription(
-                        text
-                    )
-            ]
-        });
-    }
-
-    // --------------------------------------------------------
-    // TEST
-    // --------------------------------------------------------
-
-    if (sub === "test") {
-        const type =
-            interaction.options.getString(
-                "type"
-            );
-
-        const config =
-            await LogConfig.findOne({
-                guildId:
-                    interaction.guild.id,
-                type
-            });
-
-        if (
-            !config?.channelId
-        ) {
-            return interaction.reply({
-                content:
-                    "❌ That log type is not configured.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        const channel =
-            interaction.guild.channels.cache.get(
-                config.channelId
-            );
-
-        if (
-            !channel?.isTextBased()
-        ) {
-            return interaction.reply({
-                content:
-                    "❌ Log channel is invalid.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        await channel.send({
-            embeds: [
-                embed(0x57f287)
-                    .setTitle(
-                        "🧪 27Pro Log Test"
-                    )
-                    .setDescription(
-                        `Logging system **${type}** is working correctly.`
-                    )
-            ]
-        });
-
-        return interaction.reply({
-            content:
-                `✅ Test sent to ${channel}.`,
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    // --------------------------------------------------------
-    // DISABLE
-    // --------------------------------------------------------
-
-    if (sub === "disable") {
-        const type =
-            interaction.options.getString(
-                "type"
-            );
-
-        await LogConfig.findOneAndUpdate(
-            {
-                guildId:
-                    interaction.guild.id,
-                type
-            },
-            {
-                enabled: false
-            },
-            {
-                upsert: true
-            }
-        );
-
-        return interaction.reply({
-            content:
-                `✅ **${type}** logging disabled.`
-        });
-    }
-}
-
-// ============================================================
-// AUTOMOD COMMANDS
-// ============================================================
-
-if (command === "automod") {
-    const sub =
-        interaction.options.getSubcommand();
-
-    if (
-        !interaction.memberPermissions.has(
-            PermissionFlagsBits.ManageGuild
-        )
-    ) {
-        return interaction.reply({
-            content:
-                "❌ You need Manage Server.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    const config =
-        await getAutoMod(
-            interaction.guild.id
-        );
-
-    // --------------------------------------------------------
-    // ENABLE
-    // --------------------------------------------------------
-
-    if (sub === "enable") {
-        config.enabled = true;
-        await config.save();
-
-        return interaction.reply({
-            content:
-                "🛡️ AutoMod enabled."
-        });
-    }
-
-    // --------------------------------------------------------
-    // DISABLE
-    // --------------------------------------------------------
-
-    if (sub === "disable") {
-        config.enabled = false;
-        await config.save();
-
-        return interaction.reply({
-            content:
-                "🛡️ AutoMod disabled."
-        });
-    }
-
-    // --------------------------------------------------------
-    // CONFIG
-    // --------------------------------------------------------
-
-    if (sub === "config") {
-        return interaction.reply({
-            embeds: [
-                embed(0x5865f2)
-                    .setTitle(
-                        "🛡️ AutoMod Configuration"
-                    )
-                    .addFields(
-                        {
-                            name: "Enabled",
-                            value:
-                                String(
-                                    config.enabled
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Invites",
-                            value:
-                                String(
-                                    config.inviteFilter
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Links",
-                            value:
-                                String(
-                                    config.linkFilter
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Caps",
-                            value:
-                                String(
-                                    config.capsFilter
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Mention Spam",
-                            value:
-                                String(
-                                    config.mentionSpam
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Duplicate Messages",
-                            value:
-                                String(
-                                    config.duplicateFilter
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Max Mentions",
-                            value:
-                                String(
-                                    config.maxMentions
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Punishment",
-                            value:
-                                config.punishment ||
-                                "delete",
-                            inline: true
-                        }
-                    )
-            ]
-        });
-    }
-
-    // --------------------------------------------------------
-    // PUNISHMENT
-    // --------------------------------------------------------
-
-    if (sub === "punishment") {
-        const type =
-            interaction.options.getString(
-                "type"
-            );
-
-        config.punishment =
-            type;
-
-        await config.save();
-
-        return interaction.reply({
-            content:
-                `✅ AutoMod punishment set to **${type}**.`
-        });
-    }
-
-    // --------------------------------------------------------
-    // ADD WORD
-    // --------------------------------------------------------
-
-    if (sub === "word") {
-        const word =
-            interaction.options.getString(
-                "word"
-            );
-
-        if (
-            !config.blockedWords.includes(
-                word.toLowerCase()
-            )
-        ) {
-            config.blockedWords.push(
-                word.toLowerCase()
-            );
-        }
-
-        await config.save();
-
-        return interaction.reply({
-            content:
-                `🚫 Added **${word}** to the blocked-word list.`
-        });
-    }
-
-    // --------------------------------------------------------
-    // REMOVE WORD
-    // --------------------------------------------------------
-
-    if (sub === "unword") {
-        const word =
-            interaction.options.getString(
-                "word"
-            );
-
-        config.blockedWords =
-            config.blockedWords.filter(
-                item =>
-                    item !==
-                    word.toLowerCase()
-            );
-
-        await config.save();
-
-        return interaction.reply({
-            content:
-                `✅ Removed **${word}** from the blocked-word list.`
-        });
-    }
-}
-
-// ============================================================
-// SECURITY COMMANDS
-// ============================================================
-
-if (command === "security") {
-    const sub =
-        interaction.options.getSubcommand();
-
-    if (
-        !interaction.memberPermissions.has(
-            PermissionFlagsBits.Administrator
-        )
-    ) {
-        return interaction.reply({
-            content:
-                "❌ You need Administrator.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    const config =
-        await getSecurity(
-            interaction.guild.id
-        );
-
-    // --------------------------------------------------------
-    // ENABLE
-    // --------------------------------------------------------
-
-    if (sub === "enable") {
-        config.enabled = true;
-        await config.save();
-
-        return interaction.reply({
-            content:
-                "🛡️ Advanced security enabled."
-        });
-    }
-
-    // --------------------------------------------------------
-    // DISABLE
-    // --------------------------------------------------------
-
-    if (sub === "disable") {
-        config.enabled = false;
-        await config.save();
-
-        return interaction.reply({
-            content:
-                "🛡️ Advanced security disabled."
-        });
-    }
-
-    // --------------------------------------------------------
-    // CONFIG
-    // --------------------------------------------------------
-
-    if (sub === "config") {
-        return interaction.reply({
-            embeds: [
-                embed(0xff0000)
-                    .setTitle(
-                        "🚨 27Pro Security"
-                    )
-                    .addFields(
-                        {
-                            name: "Enabled",
-                            value:
-                                String(
-                                    config.enabled
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Anti-Raid",
-                            value:
-                                String(
-                                    config.antiRaid
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Anti-Nuke",
-                            value:
-                                String(
-                                    config.antiNuke
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Anti Bot Add",
-                            value:
-                                String(
-                                    config.antiBotAdd
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Anti Channel Delete",
-                            value:
-                                String(
-                                    config.antiChannelDelete
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Anti Role Delete",
-                            value:
-                                String(
-                                    config.antiRoleDelete
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Raid Mode",
-                            value:
-                                String(
-                                    config.raidMode
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Raid Threshold",
-                            value:
-                                String(
-                                    config.raidThreshold
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Punishment",
-                            value:
-                                config.punishment ||
-                                "timeout",
-                            inline: true
-                        }
-                    )
-            ]
-        });
-    }
-
-    // --------------------------------------------------------
-    // TRUST USER
-    // --------------------------------------------------------
-
-    if (sub === "trust") {
-        const user =
-            interaction.options.getUser(
-                "user"
-            );
-
-        if (
-            !config.trustedUsers.includes(
-                user.id
-            )
-        ) {
-            config.trustedUsers.push(
-                user.id
-            );
-        }
-
-        await config.save();
-
-        return interaction.reply({
-            content:
-                `✅ ${user} added to the security whitelist.`
-        });
-    }
-
-    // --------------------------------------------------------
-    // UNTRUST USER
-    // --------------------------------------------------------
-
-    if (sub === "untrust") {
-        const user =
-            interaction.options.getUser(
-                "user"
-            );
-
-        config.trustedUsers =
-            config.trustedUsers.filter(
-                id =>
-                    id !== user.id
-            );
-
-        await config.save();
-
-        return interaction.reply({
-            content:
-                `✅ ${user} removed from the security whitelist.`
-        });
-    }
-
-    // --------------------------------------------------------
-    // TRUST ROLE
-    // --------------------------------------------------------
-
-    if (sub === "trustrole") {
-        const role =
-            interaction.options.getRole(
-                "role"
-            );
-
-        if (
-            !config.trustedRoles.includes(
-                role.id
-            )
-        ) {
-            config.trustedRoles.push(
-                role.id
-            );
-        }
-
-        await config.save();
-
-        return interaction.reply({
-            content:
-                `✅ ${role} added as a trusted security role.`
-        });
-    }
-
-    // --------------------------------------------------------
-    // UNTRUST ROLE
-    // --------------------------------------------------------
-
-    if (sub === "untrustrole") {
-        const role =
-            interaction.options.getRole(
-                "role"
-            );
-
-        config.trustedRoles =
-            config.trustedRoles.filter(
-                id =>
-                    id !== role.id
-            );
-
-        await config.save();
-
-        return interaction.reply({
-            content:
-                `✅ ${role} removed from trusted security roles.`
-        });
-    }
-
-    // --------------------------------------------------------
-    // RAID MODE
-    // --------------------------------------------------------
-
-    if (sub === "raidmode") {
-        const enabled =
-            interaction.options.getBoolean(
-                "enabled"
-            );
-
-        config.raidMode =
-            enabled;
-
-        await config.save();
-
-        return interaction.reply({
-            content:
-                enabled
-                    ? "🚨 Raid mode manually enabled."
-                    : "✅ Raid mode disabled."
-        });
-    }
-}
-
-// ============================================================
-// TICKET COMMANDS
-// ============================================================
-
-if (command === "ticket") {
-    const sub =
-        interaction.options.getSubcommand();
-
-    const config =
-        await getTickets(
-            interaction.guild.id
-        );
-
-    // --------------------------------------------------------
-    // SETUP
-    // --------------------------------------------------------
-
-    if (
-        sub === "setup"
-    ) {
-        if (
-            !interaction.memberPermissions.has(
-                PermissionFlagsBits.ManageGuild
-            )
-        ) {
-            return interaction.reply({
-                content:
-                    "❌ You need Manage Server.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        const category =
-            interaction.options.getChannel(
-                "category"
-            );
-
-        const staffRole =
-            interaction.options.getRole(
-                "staff"
-            );
-
-        const logs =
-            interaction.options.getChannel(
-                "logs"
-            );
-
-        config.enabled = true;
-        config.categoryId =
-            category?.id || null;
-
-        config.staffRoleId =
-            staffRole?.id || null;
-
-        config.logChannelId =
-            logs?.id || null;
-
-        config.transcriptChannelId =
-            logs?.id || null;
-
-        await config.save();
-
-        return interaction.reply({
-            content:
-                "🎫 Ticket system configured."
-        });
-    }
-
-    // --------------------------------------------------------
-    // PANEL
-    // --------------------------------------------------------
-
-    if (
-        sub === "panel"
-    ) {
-        if (
-            !interaction.memberPermissions.has(
-                PermissionFlagsBits.ManageGuild
-            )
-        ) {
-            return interaction.reply({
-                content:
-                    "❌ You need Manage Server.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        const channel =
-            interaction.options.getChannel(
-                "channel"
-            );
-
-        const button =
-            new ButtonBuilder()
-                .setCustomId(
-                    "ticket:create"
-                )
-                .setLabel(
-                    "Create Ticket"
-                )
-                .setEmoji("🎫")
-                .setStyle(
-                    ButtonStyle.Primary
+            const guildId =
+                interaction.guild.id;
+
+            // ------------------------------------------------
+            // /logs setup
+            // ------------------------------------------------
+
+            if (subcommand === "setup") {
+
+                const type =
+                    interaction.options.getString(
+                        "type"
+                    );
+
+                const channel =
+                    interaction.options.getChannel(
+                        "channel"
+                    );
+
+                const validTypes = [
+                    "general",
+                    "member",
+                    "message",
+                    "moderation",
+                    "role",
+                    "channel",
+                    "server",
+                    "bot",
+                    "voice",
+                    "automod",
+                    "ticket",
+                    "raid",
+                    "security",
+                    "giveaway",
+                    "invite",
+                    "webhook"
+                ];
+
+                if (
+                    !validTypes.includes(type)
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ Invalid log type.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                let config =
+                    await LogConfig.findOne({
+                        guildId
+                    });
+
+                if (!config) {
+                    config =
+                        new LogConfig({
+                            guildId
+                        });
+                }
+
+                if (!config.channels) {
+                    config.channels = {};
+                }
+
+                config.enabled = true;
+
+                config.channels[type] =
+                    channel.id;
+
+                config.markModified(
+                    "channels"
                 );
 
-        await channel.send({
-            embeds: [
-                embed(0x5865f2)
-                    .setTitle(
-                        "🎫 Support Center"
-                    )
-                    .setDescription(
-                        "Need help? Click the button below to open a private support ticket."
-                    )
-            ],
-            components: [
-                new ActionRowBuilder()
-                    .addComponents(
-                        button
-                    )
-            ]
-        });
+                await config.save();
 
-        return interaction.reply({
-            content:
-                `✅ Ticket panel sent to ${channel}.`
-        });
-    }
-
-    // --------------------------------------------------------
-    // CLOSE
-    // --------------------------------------------------------
-
-    if (
-        sub === "close"
-    ) {
-        const ticket =
-            await getTicket(
-                interaction.guild.id,
-                interaction.channel.id
-            );
-
-        if (!ticket) {
-            return interaction.reply({
-                content:
-                    "❌ This is not a ticket.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        const staff =
-            await ticketStaff(
-                interaction,
-                config
-            );
-
-        if (
-            ticket.userId !==
-                interaction.user.id &&
-            !staff
-        ) {
-            return interaction.reply({
-                content:
-                    "❌ You cannot close this ticket.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        await interaction.deferReply();
-
-        await closeTicket(
-            interaction.guild,
-            ticket,
-            interaction.user.id
-        );
-
-        return interaction.editReply({
-            content:
-                "🔒 Ticket closed."
-        });
-    }
-
-    // --------------------------------------------------------
-    // CLAIM
-    // --------------------------------------------------------
-
-    if (
-        sub === "claim"
-    ) {
-        const ticket =
-            await getTicket(
-                interaction.guild.id,
-                interaction.channel.id
-            );
-
-        if (!ticket) {
-            return interaction.reply({
-                content:
-                    "❌ This is not a ticket.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        if (
-            !await ticketStaff(
-                interaction,
-                config
-            )
-        ) {
-            return interaction.reply({
-                content:
-                    "❌ You are not ticket staff.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        ticket.claimedBy =
-            interaction.user.id;
-
-        await ticket.save();
-
-        return interaction.reply({
-            content:
-                `🙋 Ticket claimed by ${interaction.user}.`
-        });
-    }
-
-    // --------------------------------------------------------
-    // REOPEN
-    // --------------------------------------------------------
-
-    if (
-        sub === "reopen"
-    ) {
-        const ticket =
-            await getTicket(
-                interaction.guild.id,
-                interaction.channel.id
-            );
-
-        if (!ticket) {
-            return interaction.reply({
-                content:
-                    "❌ This is not a ticket.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        if (
-            !await ticketStaff(
-                interaction,
-                config
-            )
-        ) {
-            return interaction.reply({
-                content:
-                    "❌ You are not ticket staff.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        await reopenTicket(
-            interaction.guild,
-            ticket
-        );
-
-        return interaction.reply({
-            content:
-                "🔓 Ticket reopened."
-        });
-    }
-
-    // --------------------------------------------------------
-    // ADD
-    // --------------------------------------------------------
-
-    if (
-        sub === "add"
-    ) {
-        const ticket =
-            await getTicket(
-                interaction.guild.id,
-                interaction.channel.id
-            );
-
-        if (!ticket) {
-            return interaction.reply({
-                content:
-                    "❌ This is not a ticket.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        if (
-            !await ticketStaff(
-                interaction,
-                config
-            )
-        ) {
-            return interaction.reply({
-                content:
-                    "❌ You are not ticket staff.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        const user =
-            interaction.options.getUser(
-                "user"
-            );
-
-        await interaction.channel.permissionOverwrites.edit(
-            user.id,
-            {
-                ViewChannel: true,
-                SendMessages: true,
-                ReadMessageHistory: true,
-                AttachFiles: true
+                return interaction.reply({
+                    content:
+                        `✅ **${type}** logs will now be sent to ${channel}.`
+                });
             }
-        );
 
-        return interaction.reply({
-            content:
-                `➕ Added ${user} to the ticket.`
-        });
-    }
+            // ------------------------------------------------
+            // /logs config
+            // ------------------------------------------------
 
-    // --------------------------------------------------------
-    // REMOVE
-    // --------------------------------------------------------
+            if (subcommand === "config") {
 
-    if (
-        sub === "remove"
-    ) {
-        const ticket =
-            await getTicket(
-                interaction.guild.id,
-                interaction.channel.id
-            );
+                const config =
+                    await LogConfig.findOne({
+                        guildId
+                    });
 
-        if (!ticket) {
-            return interaction.reply({
-                content:
-                    "❌ This is not a ticket.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
+                if (!config) {
+                    return interaction.reply({
+                        embeds: [
+                            embed(0x5865f2)
+                                .setTitle(
+                                    "📋 Logging Configuration"
+                                )
+                                .setDescription(
+                                    "No logging configuration has been created yet."
+                                )
+                        ]
+                    });
+                }
 
-        if (
-            !await ticketStaff(
-                interaction,
-                config
-            )
-        ) {
-            return interaction.reply({
-                content:
-                    "❌ You are not ticket staff.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
+                const channels =
+                    config.channels || {};
 
-        const user =
-            interaction.options.getUser(
-                "user"
-            );
+                const types = [
+                    "general",
+                    "member",
+                    "message",
+                    "moderation",
+                    "role",
+                    "channel",
+                    "server",
+                    "bot",
+                    "voice",
+                    "automod",
+                    "ticket",
+                    "raid",
+                    "security",
+                    "giveaway",
+                    "invite",
+                    "webhook"
+                ];
 
-        await interaction.channel.permissionOverwrites.delete(
-            user.id
-        ).catch(() => {});
+                const description =
+                    types
+                        .map(type => {
 
-        return interaction.reply({
-            content:
-                `➖ Removed ${user} from the ticket.`
-        });
-    }
-}
+                            const channelId =
+                                channels[type];
 
-// ============================================================
-// GIVEAWAY COMMANDS
-// ============================================================
+                            return (
+                                `**${type}** → ` +
+                                (
+                                    channelId
+                                        ? `<#${channelId}>`
+                                        : "Not configured"
+                                )
+                            );
 
-if (command === "giveaway") {
-    const sub =
-        interaction.options.getSubcommand();
-
-    if (
-        !interaction.memberPermissions.has(
-            PermissionFlagsBits.ManageGuild
-        )
-    ) {
-        return interaction.reply({
-            content:
-                "❌ You need Manage Server.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    // --------------------------------------------------------
-    // START
-    // --------------------------------------------------------
-
-    if (
-        sub === "start"
-    ) {
-        const minutes =
-            interaction.options.getInteger(
-                "minutes"
-            );
-
-        const winners =
-            interaction.options.getInteger(
-                "winners"
-            );
-
-        const prize =
-            interaction.options.getString(
-                "prize"
-            );
-
-        const endsAt =
-            new Date(
-                Date.now() +
-                    minutes *
-                    60 *
-                    1000
-            );
-
-        const giveaway =
-            await Giveaway.create({
-                guildId:
-                    interaction.guild.id,
-                channelId:
-                    interaction.channel.id,
-                hostId:
-                    interaction.user.id,
-                prize,
-                winners,
-                endsAt,
-                ended: false,
-                participants: []
-            });
-
-        const button =
-            new ButtonBuilder()
-                .setCustomId(
-                    "giveaway:join"
-                )
-                .setLabel(
-                    "Enter Giveaway"
-                )
-                .setEmoji("🎉")
-                .setStyle(
-                    ButtonStyle.Success
-                );
-
-        const msg =
-            await interaction.channel.send({
-                embeds: [
-                    embed(0xff0055)
-                        .setTitle(
-                            "🎉 GIVEAWAY"
-                        )
-                        .setDescription(
-                            `Prize: **${prize}**\n\n` +
-                            `🏆 Winners: **${winners}**\n` +
-                            `⏰ Ends: <t:${Math.floor(
-                                endsAt.getTime() /
-                                    1000
-                            )}:R>\n\n` +
-                            "Click the button below to enter!"
-                        )
-                        .setFooter({
-                            text:
-                                `Hosted by ${interaction.user.tag}`
                         })
-                ],
-                components: [
-                    new ActionRowBuilder()
-                        .addComponents(
-                            button
+                        .join("\n");
+
+                return interaction.reply({
+                    embeds: [
+                        embed(0x5865f2)
+                            .setTitle(
+                                "📋 27Pro Logging Configuration"
+                            )
+                            .setDescription(
+                                description
+                            )
+                    ]
+                });
+            }
+
+            // ------------------------------------------------
+            // /logs test
+            // ------------------------------------------------
+
+            if (subcommand === "test") {
+
+                const type =
+                    interaction.options.getString(
+                        "type"
+                    );
+
+                const config =
+                    await LogConfig.findOne({
+                        guildId
+                    });
+
+                const channelId =
+                    config?.channels?.[type];
+
+                if (!channelId) {
+                    return interaction.reply({
+                        content:
+                            `❌ **${type}** logs are not configured.`,
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const channel =
+                    interaction.guild.channels.cache.get(
+                        channelId
+                    );
+
+                if (
+                    !channel ||
+                    !channel.isTextBased()
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ The configured log channel no longer exists or is not a text channel.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                await channel.send({
+                    embeds: [
+                        embed(0x57f287)
+                            .setTitle(
+                                "🧪 27Pro Log Test"
+                            )
+                            .setDescription(
+                                `The **${type}** logging system is working correctly.`
+                            )
+                            .addFields(
+                                {
+                                    name:
+                                        "Server",
+                                    value:
+                                        interaction.guild.name,
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Tested By",
+                                    value:
+                                        interaction.user.tag,
+                                    inline:
+                                        true
+                                }
+                            )
+                    ]
+                });
+
+                return interaction.reply({
+                    content:
+                        `✅ Test sent to ${channel}.`,
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            // ------------------------------------------------
+            // /logs disable
+            // ------------------------------------------------
+
+            if (subcommand === "disable") {
+
+                const type =
+                    interaction.options.getString(
+                        "type"
+                    );
+
+                const config =
+                    await LogConfig.findOne({
+                        guildId
+                    });
+
+                if (!config) {
+                    return interaction.reply({
+                        content:
+                            "❌ Logging is not configured.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                if (!config.channels) {
+                    config.channels = {};
+                }
+
+                config.channels[type] =
+                    null;
+
+                config.markModified(
+                    "channels"
+                );
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        `✅ **${type}** logging disabled.`
+                });
+            }
+        }
+
+        // ====================================================
+        // AUTOMOD
+        // ====================================================
+
+        if (command === "automod") {
+
+            const subcommand =
+                interaction.options.getSubcommand();
+
+            if (
+                !interaction.memberPermissions.has(
+                    PermissionFlagsBits.ManageGuild
+                )
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ You need **Manage Server** permission.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            const config =
+                await getAutoMod(
+                    interaction.guild.id
+                );
+
+            // ------------------------------------------------
+            // ENABLE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "enable"
+            ) {
+
+                config.enabled =
+                    true;
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        "🛡️ AutoMod has been **enabled**."
+                });
+            }
+
+            // ------------------------------------------------
+            // DISABLE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "disable"
+            ) {
+
+                config.enabled =
+                    false;
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        "🛡️ AutoMod has been **disabled**."
+                });
+            }
+
+            // ------------------------------------------------
+            // CONFIG
+            // ------------------------------------------------
+
+            if (
+                subcommand === "config"
+            ) {
+
+                return interaction.reply({
+                    embeds: [
+                        embed(0x5865f2)
+                            .setTitle(
+                                "🛡️ AutoMod Configuration"
+                            )
+                            .addFields(
+                                {
+                                    name:
+                                        "Enabled",
+                                    value:
+                                        config.enabled
+                                            ? "✅ Yes"
+                                            : "❌ No",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Invite Filter",
+                                    value:
+                                        config.antiInvite
+                                            ? "✅ On"
+                                            : "❌ Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Spam Protection",
+                                    value:
+                                        config.antiSpam
+                                            ? "✅ On"
+                                            : "❌ Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Caps Protection",
+                                    value:
+                                        config.antiCaps
+                                            ? "✅ On"
+                                            : "❌ Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Mention Protection",
+                                    value:
+                                        config.antiMentionSpam
+                                            ? "✅ On"
+                                            : "❌ Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Max Mentions",
+                                    value:
+                                        String(
+                                            config.maxMentions ||
+                                            5
+                                        ),
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Duplicate Messages",
+                                    value:
+                                        config.duplicateFilter
+                                            ? "✅ On"
+                                            : "❌ Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Punishment",
+                                    value:
+                                        config.punishment ||
+                                        "delete",
+                                    inline:
+                                        true
+                                }
+                            ]
+                    ]
+                });
+            }
+
+            // ------------------------------------------------
+            // PUNISHMENT
+            // ------------------------------------------------
+
+            if (
+                subcommand === "punishment"
+            ) {
+
+                const punishment =
+                    interaction.options.getString(
+                        "type"
+                    );
+
+                const validPunishments = [
+                    "delete",
+                    "warn",
+                    "timeout",
+                    "kick",
+                    "ban"
+                ];
+
+                if (
+                    !validPunishments.includes(
+                        punishment
+                    )
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ Invalid punishment.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                config.punishment =
+                    punishment;
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        `✅ AutoMod punishment set to **${punishment}**.`
+                });
+            }
+
+            // ------------------------------------------------
+            // WORD
+            // ------------------------------------------------
+
+            if (
+                subcommand === "word"
+            ) {
+
+                const word =
+                    interaction.options.getString(
+                        "word"
+                    )
+                        .trim()
+                        .toLowerCase();
+
+                if (!word) {
+                    return interaction.reply({
+                        content:
+                            "❌ Enter a word.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                if (
+                    !config.blockedWords
+                ) {
+                    config.blockedWords =
+                        [];
+                }
+
+                if (
+                    !config.blockedWords.includes(
+                        word
+                    )
+                ) {
+                    config.blockedWords.push(
+                        word
+                    );
+                }
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        `🚫 Added **${word}** to the blocked-word list.`
+                });
+            }
+
+            // ------------------------------------------------
+            // UNWORD
+            // ------------------------------------------------
+
+            if (
+                subcommand === "unword"
+            ) {
+
+                const word =
+                    interaction.options.getString(
+                        "word"
+                    )
+                        .trim()
+                        .toLowerCase();
+
+                config.blockedWords =
+                    (
+                        config.blockedWords ||
+                        []
+                    ).filter(
+                        item =>
+                            item !== word
+                    );
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        `✅ Removed **${word}** from the blocked-word list.`
+                });
+            }
+
+            // ------------------------------------------------
+            // TOGGLE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "toggle"
+            ) {
+
+                const feature =
+                    interaction.options.getString(
+                        "feature"
+                    );
+
+                const enabled =
+                    interaction.options.getBoolean(
+                        "enabled"
+                    );
+
+                const featureMap = {
+                    invites:
+                        "antiInvite",
+                    links:
+                        "antiLinks",
+                    spam:
+                        "antiSpam",
+                    caps:
+                        "antiCaps",
+                    mentions:
+                        "antiMentionSpam",
+                    duplicates:
+                        "duplicateFilter",
+                    raid:
+                        "antiRaid",
+                    escalation:
+                        "escalation"
+                };
+
+                const property =
+                    featureMap[
+                        feature
+                    ];
+
+                if (!property) {
+                    return interaction.reply({
+                        content:
+                            "❌ Unknown AutoMod feature.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                config[property] =
+                    enabled;
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        `✅ **${feature}** is now ${
+                            enabled
+                                ? "enabled"
+                                : "disabled"
+                        }.`
+                });
+            }
+        }
+
+        // ====================================================
+        // SECURITY
+        // ====================================================
+
+        if (command === "security") {
+
+            const subcommand =
+                interaction.options.getSubcommand();
+
+            if (
+                !interaction.memberPermissions.has(
+                    PermissionFlagsBits.Administrator
+                )
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ You need **Administrator** permission.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            const config =
+                await getSecurity(
+                    interaction.guild.id
+                );
+
+            // ------------------------------------------------
+            // ENABLE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "enable"
+            ) {
+
+                config.enabled =
+                    true;
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        "🛡️ Advanced security has been **enabled**."
+                });
+            }
+
+            // ------------------------------------------------
+            // DISABLE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "disable"
+            ) {
+
+                config.enabled =
+                    false;
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        "🛡️ Advanced security has been **disabled**."
+                });
+            }
+
+            // ------------------------------------------------
+            // CONFIG
+            // ------------------------------------------------
+
+            if (
+                subcommand === "config"
+            ) {
+
+                return interaction.reply({
+                    embeds: [
+                        embed(0xff0000)
+                            .setTitle(
+                                "🚨 27Pro Security"
+                            )
+                            .addFields(
+                                {
+                                    name:
+                                        "System",
+                                    value:
+                                        config.enabled
+                                            ? "🟢 Enabled"
+                                            : "🔴 Disabled",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Anti-Raid",
+                                    value:
+                                        config.antiRaid
+                                            ? "🟢 On"
+                                            : "🔴 Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Anti-Nuke",
+                                    value:
+                                        config.antiNuke
+                                            ? "🟢 On"
+                                            : "🔴 Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Anti Bot Add",
+                                    value:
+                                        config.antiBotAdd
+                                            ? "🟢 On"
+                                            : "🔴 Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Channel Protection",
+                                    value:
+                                        config.antiChannelDelete
+                                            ? "🟢 On"
+                                            : "🔴 Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Role Protection",
+                                    value:
+                                        config.antiRoleDelete
+                                            ? "🟢 On"
+                                            : "🔴 Off",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Raid Mode",
+                                    value:
+                                        config.raidMode
+                                            ? "🚨 ACTIVE"
+                                            : "🟢 Normal",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Raid Threshold",
+                                    value:
+                                        String(
+                                            config.raidThreshold ||
+                                            5
+                                        ),
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Punishment",
+                                    value:
+                                        config.punishment ||
+                                        "timeout",
+                                    inline:
+                                        true
+                                }
+                            ]
+                    ]
+                });
+            }
+
+            // ------------------------------------------------
+            // RAIDMODE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "raidmode"
+            ) {
+
+                const enabled =
+                    interaction.options.getBoolean(
+                        "enabled"
+                    );
+
+                config.raidMode =
+                    enabled;
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        enabled
+                            ? "🚨 Raid mode manually **enabled**."
+                            : "✅ Raid mode manually **disabled**."
+                });
+            }
+
+            // ------------------------------------------------
+            // TRUST USER
+            // ------------------------------------------------
+
+            if (
+                subcommand === "trust"
+            ) {
+
+                const user =
+                    interaction.options.getUser(
+                        "user"
+                    );
+
+                if (
+                    !config.trustedUsers
+                ) {
+                    config.trustedUsers =
+                        [];
+                }
+
+                if (
+                    !config.trustedUsers.includes(
+                        user.id
+                    )
+                ) {
+                    config.trustedUsers.push(
+                        user.id
+                    );
+                }
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        `✅ ${user} is now trusted by 27Pro security.`
+                });
+            }
+
+            // ------------------------------------------------
+            // UNTRUST USER
+            // ------------------------------------------------
+
+            if (
+                subcommand === "untrust"
+            ) {
+
+                const user =
+                    interaction.options.getUser(
+                        "user"
+                    );
+
+                config.trustedUsers =
+                    (
+                        config.trustedUsers ||
+                        []
+                    ).filter(
+                        id =>
+                            id !== user.id
+                    );
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        `✅ ${user} has been removed from the security whitelist.`
+                });
+            }
+
+            // ------------------------------------------------
+            // TRUST ROLE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "trustrole"
+            ) {
+
+                const role =
+                    interaction.options.getRole(
+                        "role"
+                    );
+
+                if (
+                    !config.trustedRoles
+                ) {
+                    config.trustedRoles =
+                        [];
+                }
+
+                if (
+                    !config.trustedRoles.includes(
+                        role.id
+                    )
+                ) {
+                    config.trustedRoles.push(
+                        role.id
+                    );
+                }
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        `✅ ${role} is now a trusted security role.`
+                });
+            }
+
+            // ------------------------------------------------
+            // UNTRUST ROLE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "untrustrole"
+            ) {
+
+                const role =
+                    interaction.options.getRole(
+                        "role"
+                    );
+
+                config.trustedRoles =
+                    (
+                        config.trustedRoles ||
+                        []
+                    ).filter(
+                        id =>
+                            id !== role.id
+                    );
+
+                await config.save();
+
+                return interaction.reply({
+                    content:
+                        `✅ ${role} has been removed from trusted security roles.`
+                });
+            }
+        }
+
+        // ====================================================
+        // TICKETS
+        // ====================================================
+
+        if (command === "ticket") {
+
+            const subcommand =
+                interaction.options.getSubcommand();
+
+            const guildId =
+                interaction.guild.id;
+
+            const ticketConfig =
+                await TicketConfig.findOne({
+                    guildId
+                });
+
+            // ------------------------------------------------
+            // SETUP
+            // ------------------------------------------------
+
+            if (
+                subcommand === "setup"
+            ) {
+
+                if (
+                    !interaction.memberPermissions.has(
+                        PermissionFlagsBits.ManageGuild
+                    )
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ You need **Manage Server** permission.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const category =
+                    interaction.options.getChannel(
+                        "category"
+                    );
+
+                const staffRole =
+                    interaction.options.getRole(
+                        "staff"
+                    );
+
+                const logs =
+                    interaction.options.getChannel(
+                        "logs"
+                    );
+
+                const transcript =
+                    interaction.options.getChannel(
+                        "transcript"
+                    );
+
+                const autoClose =
+                    interaction.options.getInteger(
+                        "autoclose"
+                    );
+
+                const config =
+                    ticketConfig ||
+                    new TicketConfig({
+                        guildId
+                    });
+
+                config.enabled =
+                    true;
+
+                config.categoryId =
+                    category?.id ||
+                    null;
+
+                config.staffRoleId =
+                    staffRole?.id ||
+                    null;
+
+                config.logChannelId =
+                    logs?.id ||
+                    null;
+
+                config.transcriptChannelId =
+                    transcript?.id ||
+                    logs?.id ||
+                    null;
+
+                if (
+                    autoClose !== null &&
+                    autoClose !== undefined
+                ) {
+                    config.autoCloseHours =
+                        autoClose;
+                }
+
+                await config.save();
+
+                return interaction.reply({
+                    embeds: [
+                        embed(0x5865f2)
+                            .setTitle(
+                                "🎫 Ticket System Configured"
+                            )
+                            .setDescription(
+                                "27Pro ticketing is now ready."
+                            )
+                            .addFields(
+                                {
+                                    name:
+                                        "Category",
+                                    value:
+                                        category
+                                            ? `<#${category.id}>`
+                                            : "Not set",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Staff Role",
+                                    value:
+                                        staffRole
+                                            ? `<@&${staffRole.id}>`
+                                            : "Not set",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Logs",
+                                    value:
+                                        logs
+                                            ? `<#${logs.id}>`
+                                            : "Not set",
+                                    inline:
+                                        true
+                                }
+                            )
+                    ]
+                });
+            }
+
+            // ------------------------------------------------
+            // PANEL
+            // ------------------------------------------------
+
+            if (
+                subcommand === "panel"
+            ) {
+
+                if (
+                    !interaction.memberPermissions.has(
+                        PermissionFlagsBits.ManageGuild
+                    )
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ You need **Manage Server** permission.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                if (!ticketConfig) {
+                    return interaction.reply({
+                        content:
+                            "❌ Configure the ticket system first with `/ticket setup`.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const channel =
+                    interaction.options.getChannel(
+                        "channel"
+                    );
+
+                const button =
+                    new ButtonBuilder()
+                        .setCustomId(
+                            "ticket:create"
+                        )
+                        .setLabel(
+                            "Create Ticket"
+                        )
+                        .setEmoji("🎫")
+                        .setStyle(
+                            ButtonStyle.Primary
+                        );
+
+                const message =
+                    await channel.send({
+                        embeds: [
+                            embed(0x5865f2)
+                                .setTitle(
+                                    "🎫 Support Center"
+                                )
+                                .setDescription(
+                                    "Need help? Click **Create Ticket** below to open a private support ticket."
+                                )
+                        ],
+                        components: [
+                            new ActionRowBuilder()
+                                .addComponents(
+                                    button
+                                )
+                        ]
+                    });
+
+                ticketConfig.panelChannelId =
+                    channel.id;
+
+                ticketConfig.panelMessageId =
+                    message.id;
+
+                await ticketConfig.save();
+
+                return interaction.reply({
+                    content:
+                        `✅ Ticket panel created in ${channel}.`
+                });
+            }
+
+            // ------------------------------------------------
+            // GET CURRENT TICKET
+            // ------------------------------------------------
+
+            const currentTicket =
+                await Ticket.findOne({
+                    guildId,
+                    channelId:
+                        interaction.channel.id
+                });
+
+            // ------------------------------------------------
+            // CLOSE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "close"
+            ) {
+
+                if (!currentTicket) {
+                    return interaction.reply({
+                        content:
+                            "❌ This channel is not a ticket.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const isStaff =
+                    ticketConfig?.staffRoleId &&
+                    interaction.member.roles.cache.has(
+                        ticketConfig.staffRoleId
+                    );
+
+                if (
+                    currentTicket.userId !==
+                        interaction.user.id &&
+                    !isStaff
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ You cannot close this ticket.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                currentTicket.status =
+                    "closed";
+
+                currentTicket.closedBy =
+                    interaction.user.id;
+
+                currentTicket.closedAt =
+                    new Date();
+
+                await currentTicket.save();
+
+                await interaction.channel.permissionOverwrites
+                    .edit(
+                        currentTicket.userId,
+                        {
+                            ViewChannel:
+                                true,
+                            SendMessages:
+                                false,
+                            ReadMessageHistory:
+                                true
+                        }
+                    )
+                    .catch(
+                        () => {}
+                    );
+
+                return interaction.reply({
+                    embeds: [
+                        embed(0xff0000)
+                            .setTitle(
+                                "🔒 Ticket Closed"
+                            )
+                            .setDescription(
+                                `Closed by ${interaction.user}.`
+                            )
+                    ]
+                });
+            }
+
+            // ------------------------------------------------
+            // CLAIM
+            // ------------------------------------------------
+
+            if (
+                subcommand === "claim"
+            ) {
+
+                if (!currentTicket) {
+                    return interaction.reply({
+                        content:
+                            "❌ This channel is not a ticket.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const isStaff =
+                    ticketConfig?.staffRoleId &&
+                    interaction.member.roles.cache.has(
+                        ticketConfig.staffRoleId
+                    );
+
+                if (!isStaff) {
+                    return interaction.reply({
+                        content:
+                            "❌ You are not ticket staff.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                currentTicket.claimedBy =
+                    interaction.user.id;
+
+                await currentTicket.save();
+
+                return interaction.reply({
+                    content:
+                        `🙋 Ticket claimed by ${interaction.user}.`
+                });
+            }
+
+            // ------------------------------------------------
+            // ADD USER
+            // ------------------------------------------------
+
+            if (
+                subcommand === "add"
+            ) {
+
+                if (!currentTicket) {
+                    return interaction.reply({
+                        content:
+                            "❌ This channel is not a ticket.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const isStaff =
+                    ticketConfig?.staffRoleId &&
+                    interaction.member.roles.cache.has(
+                        ticketConfig.staffRoleId
+                    );
+
+                if (!isStaff) {
+                    return interaction.reply({
+                        content:
+                            "❌ You are not ticket staff.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const user =
+                    interaction.options.getUser(
+                        "user"
+                    );
+
+                await interaction.channel.permissionOverwrites.edit(
+                    user.id,
+                    {
+                        ViewChannel:
+                            true,
+                        SendMessages:
+                            true,
+                        ReadMessageHistory:
+                            true,
+                        AttachFiles:
+                            true
+                    }
+                );
+
+                return interaction.reply({
+                    content:
+                        `➕ Added ${user} to this ticket.`
+                });
+            }
+
+            // ------------------------------------------------
+            // REMOVE USER
+            // ------------------------------------------------
+
+            if (
+                subcommand === "remove"
+            ) {
+
+                if (!currentTicket) {
+                    return interaction.reply({
+                        content:
+                            "❌ This channel is not a ticket.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const isStaff =
+                    ticketConfig?.staffRoleId &&
+                    interaction.member.roles.cache.has(
+                        ticketConfig.staffRoleId
+                    );
+
+                if (!isStaff) {
+                    return interaction.reply({
+                        content:
+                            "❌ You are not ticket staff.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const user =
+                    interaction.options.getUser(
+                        "user"
+                    );
+
+                await interaction.channel.permissionOverwrites
+                    .delete(
+                        user.id
+                    )
+                    .catch(
+                        () => {}
+                    );
+
+                return interaction.reply({
+                    content:
+                        `➖ Removed ${user} from this ticket.`
+                });
+            }
+
+            // ------------------------------------------------
+            // REOPEN
+            // ------------------------------------------------
+
+            if (
+                subcommand === "reopen"
+            ) {
+
+                if (!currentTicket) {
+                    return interaction.reply({
+                        content:
+                            "❌ This channel is not a ticket.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const isStaff =
+                    ticketConfig?.staffRoleId &&
+                    interaction.member.roles.cache.has(
+                        ticketConfig.staffRoleId
+                    );
+
+                if (!isStaff) {
+                    return interaction.reply({
+                        content:
+                            "❌ You are not ticket staff.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                currentTicket.status =
+                    "open";
+
+                currentTicket.closedAt =
+                    null;
+
+                currentTicket.closedBy =
+                    null;
+
+                await currentTicket.save();
+
+                await interaction.channel.permissionOverwrites
+                    .edit(
+                        currentTicket.userId,
+                        {
+                            ViewChannel:
+                                true,
+                            SendMessages:
+                                true,
+                            ReadMessageHistory:
+                                true
+                        }
+                    )
+                    .catch(
+                        () => {}
+                    );
+
+                return interaction.reply({
+                    content:
+                        "🔓 Ticket reopened."
+                });
+            }
+
+            // ------------------------------------------------
+            // DELETE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "delete"
+            ) {
+
+                if (!currentTicket) {
+                    return interaction.reply({
+                        content:
+                            "❌ This channel is not a ticket.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const isStaff =
+                    ticketConfig?.staffRoleId &&
+                    interaction.member.roles.cache.has(
+                        ticketConfig.staffRoleId
+                    );
+
+                if (!isStaff) {
+                    return interaction.reply({
+                        content:
+                            "❌ You are not ticket staff.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                await Ticket.deleteOne({
+                    _id:
+                        currentTicket._id
+                });
+
+                await interaction.reply({
+                    content:
+                        "🗑️ Deleting ticket..."
+                });
+
+                setTimeout(
+                    () => {
+                        interaction.channel
+                            .delete(
+                                "27Pro ticket deleted"
+                            )
+                            .catch(
+                                () => {}
+                            );
+                    },
+                    1500
+                );
+
+                return;
+            }
+
+            // ------------------------------------------------
+            // TRANSCRIPT
+            // ------------------------------------------------
+
+            if (
+                subcommand === "transcript"
+            ) {
+
+                if (!currentTicket) {
+                    return interaction.reply({
+                        content:
+                            "❌ This channel is not a ticket.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const isStaff =
+                    ticketConfig?.staffRoleId &&
+                    interaction.member.roles.cache.has(
+                        ticketConfig.staffRoleId
+                    );
+
+                if (!isStaff) {
+                    return interaction.reply({
+                        content:
+                            "❌ You are not ticket staff.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const messages =
+                    await interaction.channel.messages.fetch({
+                        limit:
+                            100
+                    });
+
+                const transcript =
+                    messages
+                        .sort(
+                            (a, b) =>
+                                a.createdTimestamp -
+                                b.createdTimestamp
+                        )
+                        .map(
+                            message =>
+                                `[${new Date(
+                                    message.createdTimestamp
+                                ).toISOString()}] ${
+                                    message.author.tag
+                               }: ${
+                                    message.content ||
+                                    "[embed/attachment]"
+                                }`
+                        )
+                        .join("\n");
+
+                const buffer =
+                    Buffer.from(
+                        transcript ||
+                            "No messages.",
+                        "utf8"
+                    );
+
+                const attachment =
+                    new AttachmentBuilder(
+                        buffer,
+                        {
+                            name:
+                                `ticket-${currentTicket.number || currentTicket._id}.txt`
+                        }
+                    );
+
+                return interaction.reply({
+                    content:
+                        "📄 Ticket transcript:",
+                    files: [
+                        attachment
+                    ],
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+        }
+
+        // ====================================================
+        // GIVEAWAYS
+        // ====================================================
+
+        if (command === "giveaway") {
+
+            const subcommand =
+                interaction.options.getSubcommand();
+
+            if (
+                !interaction.memberPermissions.has(
+                    PermissionFlagsBits.ManageGuild
+                )
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ You need **Manage Server** permission.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            // ------------------------------------------------
+            // START
+            // ------------------------------------------------
+
+            if (
+                subcommand === "start"
+            ) {
+
+                const minutes =
+                    interaction.options.getInteger(
+                        "minutes"
+                    );
+
+                const winners =
+                    interaction.options.getInteger(
+                        "winners"
+                    );
+
+                const prize =
+                    interaction.options.getString(
+                        "prize"
+                    );
+
+                if (
+                    minutes < 1
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ Duration must be at least 1 minute.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const endAt =
+                    new Date(
+                        Date.now() +
+                            minutes *
+                            60 *
+                            1000
+                    );
+
+                const giveaway =
+                    new Giveaway({
+                        guildId:
+                            interaction.guild.id,
+                        channelId:
+                            interaction.channel.id,
+                        hostId:
+                            interaction.user.id,
+                        prize,
+                        winners:
+                            winners || 1,
+                        endAt,
+                        ended:
+                            false,
+                        participants:
+                            []
+                    });
+
+                await giveaway.save();
+
+                const button =
+                    new ButtonBuilder()
+                        .setCustomId(
+                            "giveaway:join"
+                        )
+                        .setLabel(
+                            "Enter Giveaway"
+                        )
+                        .setEmoji("🎉")
+                        .setStyle(
+                            ButtonStyle.Success
+                        );
+
+                const message =
+                    await interaction.channel.send({
+                        embeds: [
+                            embed(0xff0055)
+                                .setTitle(
+                                    "🎉 GIVEAWAY"
+                                )
+                                .setDescription(
+                                    `🎁 **Prize:** ${prize}\n\n` +
+                                    `🏆 **Winners:** ${winners}\n` +
+                                    `⏰ **Ends:** <t:${Math.floor(
+                                        endAt.getTime() /
+                                            1000
+                                    )}:R>\n\n` +
+                                    "Click **Enter Giveaway** below!"
+                                )
+                                .setFooter({
+                                    text:
+                                        `Hosted by ${interaction.user.tag}`
+                                })
+                        ],
+                        components: [
+                            new ActionRowBuilder()
+                                .addComponents(
+                                    button
+                                )
+                        ]
+                    });
+
+                giveaway.messageId =
+                    message.id;
+
+                await giveaway.save();
+
+                if (
+                    typeof scheduleGiveaway ===
+                    "function"
+                ) {
+                    scheduleGiveaway(
+                        giveaway
+                    );
+                }
+
+                return interaction.reply({
+                    content:
+                        "🎉 Giveaway started!",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            // ------------------------------------------------
+            // END
+            // ------------------------------------------------
+
+            if (
+                subcommand === "end"
+            ) {
+
+                const messageId =
+                    interaction.options.getString(
+                        "messageid"
+                    );
+
+                const giveaway =
+                    await Giveaway.findOne({
+                        guildId:
+                            interaction.guild.id,
+                        messageId
+                    });
+
+                if (!giveaway) {
+                    return interaction.reply({
+                        content:
+                            "❌ Giveaway not found.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                if (
+                    typeof finishGiveaway ===
+                    "function"
+                ) {
+                    await finishGiveaway(
+                        giveaway
+                    );
+                } else {
+                    giveaway.ended =
+                        true;
+
+                    await giveaway.save();
+                }
+
+                return interaction.reply({
+                    content:
+                        "🏁 Giveaway ended."
+                });
+            }
+
+            // ------------------------------------------------
+            // REROLL
+            // ------------------------------------------------
+
+            if (
+                subcommand === "reroll"
+            ) {
+
+                const messageId =
+                    interaction.options.getString(
+                        "messageid"
+                    );
+
+                const giveaway =
+                    await Giveaway.findOne({
+                        guildId:
+                            interaction.guild.id,
+                        messageId
+                    });
+
+                if (!giveaway) {
+                    return interaction.reply({
+                        content:
+                            "❌ Giveaway not found.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const participants =
+                    [
+                        ...(giveaway.participants ||
+                            [])
+                    ];
+
+                if (
+                    !participants.length
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ There are no participants.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const selected =
+                    [];
+
+                while (
+                    selected.length <
+                        Math.min(
+                            giveaway.winners ||
+                                1,
+                            participants.length
+                        )
+                ) {
+
+                    const index =
+                        Math.floor(
+                            Math.random() *
+                                participants.length
+                        );
+
+                    const userId =
+                        participants[
+                            index
+                        ];
+
+                    if (
+                        !selected.includes(
+                            userId
+                        )
+                    ) {
+                        selected.push(
+                            userId
+                        );
+                    }
+                }
+
+                await interaction.channel.send({
+                    content:
+                        `🎉 **Giveaway Reroll!** Congratulations ${selected
+                            .map(
+                                id =>
+                                    `<@${id}>`
+                            )
+                            .join(
+                                ", "
+                            )}!`
+                });
+
+                return interaction.reply({
+                    content:
+                        "🔄 Giveaway rerolled.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+        }
+
+        // ====================================================
+        // RANK
+        // ====================================================
+
+        if (
+            command === "rank"
+        ) {
+
+            const user =
+                interaction.options.getUser(
+                    "user"
+                ) ||
+                interaction.user;
+
+            const data =
+                await Level.findOne({
+                    guildId:
+                        interaction.guild.id,
+                    userId:
+                        user.id
+                });
+
+            const xp =
+                data?.xp || 0;
+
+            const level =
+                Math.floor(
+                    Math.sqrt(
+                        xp / 100
+                    )
+                );
+
+            const nextLevelXP =
+                (level + 1) *
+                (level + 1) *
+                100;
+
+            return interaction.reply({
+                embeds: [
+                    embed(0x5865f2)
+                        .setTitle(
+                            `📈 ${user.username}'s Rank`
+                        )
+                        .setThumbnail(
+                            user.displayAvatarURL()
+                        )
+                        .addFields(
+                            {
+                                name:
+                                    "Level",
+                                value:
+                                    String(
+                                        level
+                                    ),
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "XP",
+                                value:
+                                    String(
+                                        xp
+                                    ),
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Next Level",
+                                value:
+                                    `${Math.max(
+                                        nextLevelXP -
+                                            xp,
+                                        0
+                                    )} XP`,
+                                inline:
+                                    true
+                            }
                         )
                 ]
             });
-
-        giveaway.messageId =
-            msg.id;
-
-        await giveaway.save();
-
-        scheduleGiveaway(
-            giveaway
-        );
-
-        return interaction.reply({
-            content:
-                `🎉 Giveaway started: ${msg.url}`,
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    // --------------------------------------------------------
-    // END
-    // --------------------------------------------------------
-
-    if (
-        sub === "end"
-    ) {
-        const messageId =
-            interaction.options.getString(
-                "messageid"
-            );
-
-        const giveaway =
-            await Giveaway.findOne({
-                guildId:
-                    interaction.guild.id,
-                messageId
-            });
-
-        if (!giveaway) {
-            return interaction.reply({
-                content:
-                    "❌ Giveaway not found.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
         }
 
-        await finishGiveaway(
-            giveaway
-        );
+        // ====================================================
+        // LEADERBOARD
+        // ====================================================
 
-        return interaction.reply({
-            content:
-                "🏁 Giveaway ended."
-        });
-    }
+        if (
+            command === "leaderboard"
+        ) {
 
-    // --------------------------------------------------------
-    // REROLL
-    // --------------------------------------------------------
-
-    if (
-        sub === "reroll"
-    ) {
-        const messageId =
-            interaction.options.getString(
-                "messageid"
-            );
-
-        const giveaway =
-            await Giveaway.findOne({
-                guildId:
-                    interaction.guild.id,
-                messageId
-            });
-
-        if (!giveaway) {
-            return interaction.reply({
-                content:
-                    "❌ Giveaway not found.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        const winners =
-            randomWinners(
-                giveaway.participants,
-                giveaway.winners
-            );
-
-        if (!winners.length) {
-            return interaction.reply({
-                content:
-                    "❌ Not enough participants.",
-                flags:
-                    MessageFlags.Ephemeral
-            });
-        }
-
-        await interaction.channel.send({
-            content:
-                `🎉 Giveaway reroll!\nCongratulations ${winners
-                    .map(id => `<@${id}>`)
-                    .join(", ")}!`
-        });
-
-        return interaction.reply({
-            content:
-                "🔄 Giveaway rerolled.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-}
-
-// ============================================================
-// LEVELING
-// ============================================================
-
-if (
-    command === "rank" ||
-    command === "leaderboard"
-) {
-    if (
-        command === "rank"
-    ) {
-        const user =
-            interaction.options.getUser(
-                "user"
-            ) ||
-            interaction.user;
-
-        const level =
-            await getLevelXP(
-                interaction.guild.id,
-                user.id
-            );
-
-        const currentLevel =
-            calculateLevel(
-                level.xp
-            );
-
-        const previousLevelXP =
-            currentLevel *
-            currentLevel *
-            100;
-
-        const nextLevelXP =
-            (currentLevel + 1) *
-            (currentLevel + 1) *
-            100;
-
-        return interaction.reply({
-            embeds: [
-                embed(0x5865f2)
-                    .setTitle(
-                        `📈 ${user.username}'s Rank`
-                    )
-                    .setThumbnail(
-                        user.displayAvatarURL()
-                    )
-                    .addFields(
-                        {
-                            name: "Level",
-                            value:
-                                String(
-                                    currentLevel
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "XP",
-                            value:
-                                String(
-                                    level.xp
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Next Level",
-                            value:
-                                `${Math.max(
-                                    nextLevelXP -
-                                        level.xp,
-                                    0
-                                )} XP`,
-                            inline: true
-                        }
-                    )
-            ]
-        });
-    }
-
-    if (
-        command === "leaderboard"
-    ) {
-        const users =
-            await Level.find({
-                guildId:
-                    interaction.guild.id
-            })
-                .sort({
-                    xp: -1
+            const users =
+                await Level.find({
+                    guildId:
+                        interaction.guild.id
                 })
-                .limit(10);
-
-        if (!users.length) {
-            return interaction.reply({
-                content:
-                    "📊 No XP data yet."
-            });
-        }
-
-        const text =
-            users
-                .map(
-                    (user, index) =>
-                        `**${index + 1}.** <@${user.userId}> — **Level ${calculateLevel(user.xp)}** • ${user.xp} XP`
-                )
-                .join("\n");
-
-        return interaction.reply({
-            embeds: [
-                embed(0xffcc00)
-                    .setTitle(
-                        "🏆 Level Leaderboard"
-                    )
-                    .setDescription(
-                        text
-                    )
-            ]
-        });
-    }
-}
-
-// ============================================================
-// ROLE PANEL
-// ============================================================
-
-if (
-    command === "rolepanel"
-) {
-    if (
-        !interaction.memberPermissions.has(
-            PermissionFlagsBits.ManageRoles
-        )
-    ) {
-        return interaction.reply({
-            content:
-                "❌ You need Manage Roles.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    const channel =
-        interaction.options.getChannel(
-            "channel"
-        );
-
-    const role =
-        interaction.options.getRole(
-            "role"
-        );
-
-    const label =
-        interaction.options.getString(
-            "label"
-        );
-
-    const emoji =
-        interaction.options.getString(
-            "emoji"
-        );
-
-    await RolePanel.create({
-        guildId:
-            interaction.guild.id,
-        channelId:
-            channel.id,
-        roleId:
-            role.id,
-        label,
-        emoji
-    });
-
-    const button =
-        new ButtonBuilder()
-            .setCustomId(
-                `role:${role.id}`
-            )
-            .setLabel(
-                label
-            )
-            .setStyle(
-                ButtonStyle.Secondary
-            );
-
-    if (emoji) {
-        button.setEmoji(
-            emoji
-        );
-    }
-
-    await channel.send({
-        embeds: [
-            embed(0x5865f2)
-                .setTitle(
-                    "🎭 Role Selection"
-                )
-                .setDescription(
-                    "Click the button below to toggle the role."
-                )
-        ],
-        components: [
-            new ActionRowBuilder()
-                .addComponents(
-                    button
-                )
-        ]
-    });
-
-    return interaction.reply({
-        content:
-            `✅ Role panel created in ${channel}.`
-    });
-}
-
-// ============================================================
-// SAY
-// ============================================================
-
-if (
-    command === "say"
-) {
-    if (
-        !interaction.memberPermissions.has(
-            PermissionFlagsBits.ManageMessages
-        )
-    ) {
-        return interaction.reply({
-            content:
-                "❌ You need Manage Messages.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    const message =
-        interaction.options.getString(
-            "message"
-        );
-
-    await interaction.channel.send({
-        content: message
-    });
-
-    return interaction.reply({
-        content:
-            "✅ Message sent.",
-        flags:
-            MessageFlags.Ephemeral
-    });
-}
-
-// ============================================================
-// ANNOUNCE
-// ============================================================
-
-if (
-    command === "announce"
-) {
-    if (
-        !interaction.memberPermissions.has(
-            PermissionFlagsBits.ManageGuild
-        )
-    ) {
-        return interaction.reply({
-            content:
-                "❌ You need Manage Server.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    const channel =
-        interaction.options.getChannel(
-            "channel"
-        );
-
-    const message =
-        interaction.options.getString(
-            "message"
-        );
-
-    await channel.send({
-        embeds: [
-            embed(0xff0055)
-                .setTitle(
-                    "📢 Announcement"
-                )
-                .setDescription(
-                    message
-                )
-                .setFooter({
-                    text:
-                        `Announced by ${interaction.user.tag}`
-                })
-        ]
-    });
-
-    return interaction.reply({
-        content:
-            `✅ Announcement sent to ${channel}.`,
-        flags:
-            MessageFlags.Ephemeral
-    });
-}
-
-// ============================================================
-// POLL
-// ============================================================
-
-if (
-    command === "poll"
-) {
-    const question =
-        interaction.options.getString(
-            "question"
-        );
-
-    const msg =
-        await interaction.channel.send({
-            embeds: [
-                embed(0x5865f2)
-                    .setTitle(
-                        "📊 Poll"
-                    )
-                    .setDescription(
-                        question
-                    )
-                    .setFooter({
-                        text:
-                            `Poll by ${interaction.user.tag}`
+                    .sort({
+                        xp:
+                            -1
                     })
-            ]
-        });
+                    .limit(
+                        10
+                    );
 
-    await msg.react("👍");
-    await msg.react("👎");
+            if (!users.length) {
+                return interaction.reply({
+                    content:
+                        "📊 There is no XP data yet."
+                });
+            }
 
-    return interaction.reply({
-        content:
-            "✅ Poll created.",
-        flags:
-            MessageFlags.Ephemeral
-    });
-}
+            const lines =
+                users.map(
+                    (user, index) => {
 
-// ============================================================
-// REMIND
-// ============================================================
+                        const level =
+                            Math.floor(
+                                Math.sqrt(
+                                    user.xp /
+                                        100
+                                )
+                            );
 
-if (
-    command === "remind"
-) {
-    const minutes =
-        interaction.options.getInteger(
-            "minutes"
-        );
+                        return (
+                            `**${index + 1}.** ` +
+                            `<@${user.userId}> ` +
+                            `— Level **${level}** ` +
+                            `(${user.xp} XP)`
+                        );
+                    }
+                );
 
-    const message =
-        interaction.options.getString(
-            "message"
-        );
+            return interaction.reply({
+                embeds: [
+                    embed(0xffcc00)
+                        .setTitle(
+                            "🏆 Level Leaderboard"
+                        )
+                        .setDescription(
+                            lines.join(
+                                "\n"
+                            )
+                        )
+                ]
+            });
+        }
 
-    const reminder =
-        await Reminder.create({
-            guildId:
-                interaction.guild.id,
-            channelId:
-                interaction.channel.id,
-            userId:
-                interaction.user.id,
-            message,
-            dueAt:
+        // ====================================================
+        // ROLE PANEL
+        // ====================================================
+
+        if (
+            command === "rolepanel"
+        ) {
+
+            if (
+                !interaction.memberPermissions.has(
+                    PermissionFlagsBits.ManageRoles
+                )
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ You need **Manage Roles** permission.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            const channel =
+                interaction.options.getChannel(
+                    "channel"
+                );
+
+            const role =
+                interaction.options.getRole(
+                    "role"
+                );
+
+            const label =
+                interaction.options.getString(
+                    "label"
+                );
+
+            const emoji =
+                interaction.options.getString(
+                    "emoji"
+                );
+
+            const button =
+                new ButtonBuilder()
+                    .setCustomId(
+                        `role:${role.id}`
+                    )
+                    .setLabel(
+                        label
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    );
+
+            if (emoji) {
+                button.setEmoji(
+                    emoji
+                );
+            }
+
+            const message =
+                await channel.send({
+                    embeds: [
+                        embed(0x5865f2)
+                            .setTitle(
+                                "🎭 Self Roles"
+                            )
+                            .setDescription(
+                                `Click the button below to toggle ${role}.`
+                            )
+                    ],
+                    components: [
+                        new ActionRowBuilder()
+                            .addComponents(
+                                button
+                            )
+                    ]
+                });
+
+            await RolePanel.create({
+                guildId:
+                    interaction.guild.id,
+                channelId:
+                    channel.id,
+                messageId:
+                    message.id,
+                roleId:
+                    role.id,
+                label,
+                emoji:
+                    emoji || null
+            });
+
+            return interaction.reply({
+                content:
+                    `✅ Role panel created in ${channel}.`
+            });
+        }
+
+        // ====================================================
+        // SAY
+        // ====================================================
+
+        if (
+            command === "say"
+        ) {
+
+            if (
+                !interaction.memberPermissions.has(
+                    PermissionFlagsBits.ManageMessages
+                )
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ You need **Manage Messages** permission.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            const message =
+                interaction.options.getString(
+                    "message"
+                );
+
+            await interaction.channel.send({
+                content:
+                    message
+            });
+
+            return interaction.reply({
+                content:
+                    "✅ Message sent.",
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+
+        // ====================================================
+        // ANNOUNCE
+        // ====================================================
+
+        if (
+            command === "announce"
+        ) {
+
+            if (
+                !interaction.memberPermissions.has(
+                    PermissionFlagsBits.ManageGuild
+                )
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ You need **Manage Server** permission.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            const channel =
+                interaction.options.getChannel(
+                    "channel"
+                );
+
+            const message =
+                interaction.options.getString(
+                    "message"
+                );
+
+            await channel.send({
+                embeds: [
+                    embed(0xff0055)
+                        .setTitle(
+                            "📢 Announcement"
+                        )
+                        .setDescription(
+                            message
+                        )
+                        .setFooter({
+                            text:
+                                `Announced by ${interaction.user.tag}`
+                        })
+                ]
+            });
+
+            return interaction.reply({
+                content:
+                    `✅ Announcement sent to ${channel}.`,
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+
+        // ====================================================
+        // POLL
+        // ====================================================
+
+        if (
+            command === "poll"
+        ) {
+
+            const question =
+                interaction.options.getString(
+                    "question"
+                );
+
+            const message =
+                await interaction.channel.send({
+                    embeds: [
+                        embed(0x5865f2)
+                            .setTitle(
+                                "📊 Poll"
+                            )
+                            .setDescription(
+                                question
+                            )
+                            .setFooter({
+                                text:
+                                    `Poll by ${interaction.user.tag}`
+                            })
+                    ]
+                });
+
+            await message.react(
+                "👍"
+            );
+
+            await message.react(
+                "👎"
+            );
+
+            return interaction.reply({
+                content:
+                    "✅ Poll created.",
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+
+        // ====================================================
+        // REMIND
+        // ====================================================
+
+        if (
+            command === "remind"
+        ) {
+
+            const minutes =
+                interaction.options.getInteger(
+                    "minutes"
+                );
+
+            const message =
+                interaction.options.getString(
+                    "message"
+                );
+
+            const remindAt =
                 new Date(
                     Date.now() +
                         minutes *
                         60 *
                         1000
-                ),
-            sent: false
-        });
+                );
 
-    scheduleReminder(
-        reminder
-    );
-
-    return interaction.reply({
-        embeds: [
-            embed(0x57f287)
-                .setTitle(
-                    "⏰ Reminder Created"
-                )
-                .setDescription(
-                    `I'll remind you in **${minutes} minutes**.`
-                )
-        ],
-        flags:
-            MessageFlags.Ephemeral
-    });
-}
-
-// ============================================================
-// RULES
-// ============================================================
-
-if (
-    command === "rules"
-) {
-    const channel =
-        interaction.options.getChannel(
-            "channel"
-        );
-
-    const text =
-        interaction.options.getString(
-            "message"
-        );
-
-    await channel.send({
-        embeds: [
-            embed(0xff0055)
-                .setTitle(
-                    "📜 Server Rules"
-                )
-                .setDescription(
-                    text
-                )
-                .setFooter({
-                    text:
-                        "Please follow the rules at all times."
-                })
-        ]
-    });
-
-    return interaction.reply({
-        content:
-            `✅ Rules posted in ${channel}.`,
-        flags:
-            MessageFlags.Ephemeral
-    });
-}
-
-// ============================================================
-// FUN
-// ============================================================
-
-if (
-    command === "coinflip"
-) {
-    const result =
-        Math.random() < 0.5
-            ? "Heads 🪙"
-            : "Tails 🪙";
-
-    return interaction.reply({
-        embeds: [
-            embed(0xffcc00)
-                .setTitle(
-                    "🪙 Coin Flip"
-                )
-                .setDescription(
-                    `**${result}**`
-                )
-        ]
-    });
-}
-
-if (
-    command === "roll"
-) {
-    const sides =
-        interaction.options.getInteger(
-            "sides"
-        ) || 6;
-
-    if (
-        sides < 2 ||
-        sides > 1000000
-    ) {
-        return interaction.reply({
-            content:
-                "❌ Sides must be between 2 and 1,000,000.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    const result =
-        randomInt(
-            1,
-            sides
-        );
-
-    return interaction.reply({
-        embeds: [
-            embed(0x5865f2)
-                .setTitle(
-                    "🎲 Dice Roll"
-                )
-                .setDescription(
-                    `You rolled **${result}** on a d${sides}.`
-                )
-        ]
-    });
-}
-
-if (
-    command === "8ball"
-) {
-    const question =
-        interaction.options.getString(
-            "question"
-        );
-
-    const answers = [
-        "Absolutely.",
-        "Most likely.",
-        "Yes.",
-        "It is possible.",
-        "Ask again later.",
-        "Probably not.",
-        "No.",
-        "Definitely not.",
-        "The future is unclear."
-    ];
-
-    const answer =
-        answers[
-            randomInt(
-                0,
-                answers.length - 1
-            )
-        ];
-
-    return interaction.reply({
-        embeds: [
-            embed(0x5865f2)
-                .setTitle(
-                    "🔮 Magic 8-Ball"
-                )
-                .addFields(
-                    {
-                        name: "Question",
-                        value:
-                            question
-                    },
-                    {
-                        name: "Answer",
-                        value:
-                            answer
-                    }
-                )
-        ]
-    });
-}
-
-if (
-    command === "choose"
-) {
-    const options =
-        interaction.options.getString(
-            "options"
-        );
-
-    const choices =
-        options
-            .split(",")
-            .map(
-                item =>
-                    item.trim()
-            )
-            .filter(Boolean);
-
-    if (
-        choices.length < 2
-    ) {
-        return interaction.reply({
-            content:
-                "❌ Give me at least two options separated by commas.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    const selected =
-        choices[
-            randomInt(
-                0,
-                choices.length - 1
-            )
-        ];
-
-    return interaction.reply({
-        embeds: [
-            embed(0xff0055)
-                .setTitle(
-                    "🤔 Choice"
-                )
-                .setDescription(
-                    `I choose **${selected}**`
-                )
-        ]
-    });
-}
-
-// ============================================================
-// KICK COMMANDS
-// ============================================================
-
-if (
-    command === "live"
-) {
-    const sub =
-        interaction.options.getSubcommand();
-
-    if (
-        !interaction.memberPermissions.has(
-            PermissionFlagsBits.ManageGuild
-        )
-    ) {
-        return interaction.reply({
-            content:
-                "❌ You need Manage Server.",
-            flags:
-                MessageFlags.Ephemeral
-        });
-    }
-
-    if (
-        sub === "setup"
-    ) {
-        const username =
-            interaction.options.getString(
-                "username"
-            );
-
-        const channel =
-            interaction.options.getChannel(
-                "channel"
-            );
-
-        const config =
-            await KickConfig.findOneAndUpdate(
-                {
-                    guildId:
-                        interaction.guild.id
-                },
-                {
+            const reminder =
+                await Reminder.create({
                     guildId:
                         interaction.guild.id,
-                    enabled: true,
-                    username:
-                        username
-                            .replace(
-                                /^@/,
-                                ""
-                            )
-                            .trim(),
+                    userId:
+                        interaction.user.id,
                     channelId:
-                        channel.id
-                },
-                {
-                    upsert: true,
-                    new: true
-                }
-            );
+                        interaction.channel.id,
+                    message,
+                    remindAt,
+                    sent:
+                        false
+                });
 
-        return interaction.reply({
-            embeds: [
-                embed(0x53fc18)
-                    .setTitle(
-                        "🔴 KICK Live Alerts Enabled"
-                    )
-                    .addFields(
-                        {
-                            name: "Channel",
-                            value:
-                                channel.toString(),
-                            inline: true
-                        },
-                        {
-                            name: "Username",
-                            value:
-                                `kick.com/${config.username}`,
-                            inline: true
-                        }
-                    )
-            ]
-        });
-    }
-
-    if (
-        sub === "disable"
-    ) {
-        await KickConfig.findOneAndUpdate(
-            {
-                guildId:
-                    interaction.guild.id
-            },
-            {
-                enabled: false
-            },
-            {
-                upsert: true
+            if (
+                typeof scheduleReminder ===
+                "function"
+            ) {
+                scheduleReminder(
+                    reminder
+                );
             }
-        );
 
-        return interaction.reply({
-            content:
-                "🔴 KICK live alerts disabled."
-        });
-    }
-
-    if (
-        sub === "config"
-    ) {
-        const config =
-            await KickConfig.findOne({
-                guildId:
-                    interaction.guild.id
-            });
-
-        if (!config) {
             return interaction.reply({
-                content:
-                    "❌ KICK is not configured."
+                embeds: [
+                    embed(0x57f287)
+                        .setTitle(
+                            "⏰ Reminder Created"
+                        )
+                        .setDescription(
+                            `I'll remind you in **${minutes} minutes**.`
+                        )
+                ],
+                flags:
+                    MessageFlags.Ephemeral
             });
         }
 
-        return interaction.reply({
-            embeds: [
-                embed(0x53fc18)
-                    .setTitle(
-                        "🔴 KICK Configuration"
-                    )
-                    .addFields(
-                        {
-                            name: "Enabled",
-                            value:
-                                String(
-                                    config.enabled
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Username",
-                            value:
-                                config.username,
-                            inline: true
-                        },
-                        {
-                            name: "Channel",
-                            value:
-                                config.channelId
-                                    ? `<#${config.channelId}>`
-                                    : "None",
-                            inline: true
-                        }
-                    )
-            ]
-        });
-    }
-}
+        // ====================================================
+        // COINFLIP
+        // ====================================================
 
-if (
-    command === "livecheck"
-) {
-    await interaction.deferReply();
+        if (
+            command === "coinflip"
+        ) {
 
-    const config =
-        await KickConfig.findOne({
-            guildId:
-                interaction.guild.id
-        });
+            const result =
+                Math.random() <
+                0.5
+                    ? "Heads 🪙"
+                    : "Tails 🪙";
 
-    if (
-        !config?.username
-    ) {
-        return interaction.editReply({
-            content:
-                "❌ KICK is not configured."
-        });
-    }
-
-    try {
-        const data =
-            await getKickChannel(
-                config.username
-            );
-
-        const stream =
-            data?.livestream;
-
-        if (!stream) {
-            return interaction.editReply({
+            return interaction.reply({
                 embeds: [
-                    embed(0x2b2d31)
+                    embed(0xffcc00)
                         .setTitle(
-                            "⚫ KICK Offline"
+                            "🪙 Coin Flip"
                         )
                         .setDescription(
-                            `**${config.username}** is currently offline.`
+                            `**${result}**`
                         )
                 ]
             });
         }
 
-        const category =
-            getKickCategory(
-                data
-            );
+        // ====================================================
+        // ROLL
+        // ====================================================
 
-        return interaction.editReply({
-            embeds: [
-                embed(0x53fc18)
-                    .setTitle(
-                        "🔴 KICK LIVE"
+        if (
+            command === "roll"
+        ) {
+
+            const sides =
+                interaction.options.getInteger(
+                    "sides"
+                ) ||
+                6;
+
+            if (
+                sides < 2 ||
+                sides > 1000000
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ Sides must be between 2 and 1,000,000.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            const result =
+                Math.floor(
+                    Math.random() *
+                        sides
+                ) + 1;
+
+            return interaction.reply({
+                embeds: [
+                    embed(0x5865f2)
+                        .setTitle(
+                            "🎲 Dice Roll"
+                        )
+                        .setDescription(
+                            `You rolled **${result}** on a d${sides}.`
+                        )
+                ]
+            });
+        }
+
+        // ====================================================
+        // 8BALL
+        // ====================================================
+
+        if (
+            command === "8ball"
+        ) {
+
+            const question =
+                interaction.options.getString(
+                    "question"
+                );
+
+            const answers = [
+                "Absolutely.",
+                "Most likely.",
+                "Yes.",
+                "It is possible.",
+                "Ask again later.",
+                "Probably not.",
+                "No.",
+                "Definitely not.",
+                "The future is unclear."
+            ];
+
+            const answer =
+                answers[
+                    Math.floor(
+                        Math.random() *
+                            answers.length
                     )
-                    .setDescription(
-                        `**${data.name || config.username}** is currently live.`
+                ];
+
+            return interaction.reply({
+                embeds: [
+                    embed(0x5865f2)
+                        .setTitle(
+                            "🔮 Magic 8-Ball"
+                        )
+                        .addFields(
+                            {
+                                name:
+                                    "Question",
+                                value:
+                                    question
+                            },
+                            {
+                                name:
+                                    "Answer",
+                                value:
+                                    answer
+                            }
+                        )
+                ]
+            });
+        }
+
+        // ====================================================
+        // CHOOSE
+        // ====================================================
+
+        if (
+            command === "choose"
+        ) {
+
+            const input =
+                interaction.options.getString(
+                    "options"
+                );
+
+            const choices =
+                input
+                    .split(",")
+                    .map(
+                        item =>
+                            item.trim()
                     )
-                    .addFields(
+                    .filter(
+                        Boolean
+                    );
+
+            if (
+                choices.length <
+                2
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ Enter at least two options separated by commas.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            const selected =
+                choices[
+                    Math.floor(
+                        Math.random() *
+                            choices.length
+                    )
+                ];
+
+            return interaction.reply({
+                embeds: [
+                    embed(0xff0055)
+                        .setTitle(
+                            "🤔 Choice"
+                        )
+                        .setDescription(
+                            `I choose **${selected}**`
+                        )
+                ]
+            });
+        }
+
+        // ====================================================
+        // RULES
+        // ====================================================
+
+        if (
+            command === "rules"
+        ) {
+
+            const subcommand =
+                interaction.options.getSubcommand();
+
+            if (
+                subcommand === "setup"
+            ) {
+
+                if (
+                    !interaction.memberPermissions.has(
+                        PermissionFlagsBits.ManageGuild
+                    )
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ You need **Manage Server** permission.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                const channel =
+                    interaction.options.getChannel(
+                        "channel"
+                    );
+
+                const text =
+                    interaction.options.getString(
+                        "text"
+                    );
+
+                await RulesConfig.findOneAndUpdate(
+                    {
+                        guildId:
+                            interaction.guild.id
+                    },
+                    {
+                        guildId:
+                            interaction.guild.id,
+                        enabled:
+                            true,
+                        channelId:
+                            channel.id,
+                        text
+                    },
+                    {
+                        upsert:
+                            true,
+                        new:
+                            true
+                    }
+                );
+
+                await channel.send({
+                    embeds: [
+                        embed(0xff0055)
+                            .setTitle(
+                                "📜 Server Rules"
+                            )
+                            .setDescription(
+                                text
+                            )
+                    ]
+                });
+
+                return interaction.reply({
+                    content:
+                        `✅ Rules posted in ${channel}.`
+                });
+            }
+
+            if (
+                subcommand === "show"
+            ) {
+
+                const rules =
+                    await RulesConfig.findOne({
+                        guildId:
+                            interaction.guild.id,
+                        enabled:
+                            true
+                    });
+
+                if (!rules) {
+                    return interaction.reply({
+                        content:
+                            "❌ No rules have been configured.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                return interaction.reply({
+                    embeds: [
+                        embed(0xff0055)
+                            .setTitle(
+                                "📜 Server Rules"
+                            )
+                            .setDescription(
+                                rules.text ||
+                                "No rules configured."
+                            )
+                    ]
+                });
+            }
+
+            if (
+                subcommand === "disable"
+            ) {
+
+                if (
+                    !interaction.memberPermissions.has(
+                        PermissionFlagsBits.ManageGuild
+                    )
+                ) {
+                    return interaction.reply({
+                        content:
+                            "❌ You need **Manage Server** permission.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                await RulesConfig.findOneAndUpdate(
+                    {
+                        guildId:
+                            interaction.guild.id
+                    },
+                    {
+                        enabled:
+                            false
+                    },
+                    {
+                        upsert:
+                            true
+                    }
+                );
+
+                return interaction.reply({
+                    content:
+                        "✅ Rules system disabled."
+                });
+            }
+        }
+
+        // ====================================================
+        // KICK LIVE
+        // ====================================================
+
+        if (
+            command === "live"
+        ) {
+
+            const subcommand =
+                interaction.options.getSubcommand();
+
+            if (
+                !interaction.memberPermissions.has(
+                    PermissionFlagsBits.ManageGuild
+                )
+            ) {
+                return interaction.reply({
+                    content:
+                        "❌ You need **Manage Server** permission.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            // ------------------------------------------------
+            // SETUP
+            // ------------------------------------------------
+
+            if (
+                subcommand === "setup"
+            ) {
+
+                const username =
+                    interaction.options.getString(
+                        "username"
+                    )
+                        .replace(
+                            /^@/,
+                            ""
+                        )
+                        .trim();
+
+                const channel =
+                    interaction.options.getChannel(
+                        "channel"
+                    );
+
+                await KickConfig.findOneAndUpdate(
+                    {
+                        guildId:
+                            interaction.guild.id
+                    },
+                    {
+                        guildId:
+                            interaction.guild.id,
+                        enabled:
+                            true,
+                        username,
+                        channelId:
+                            channel.id
+                    },
+                    {
+                        upsert:
+                            true,
+                        new:
+                            true
+                    }
+                );
+
+                return interaction.reply({
+                    embeds: [
+                        embed(0x53fc18)
+                            .setTitle(
+                                "🔴 KICK Live Alerts Enabled"
+                            )
+                            .addFields(
+                                {
+                                    name:
+                                        "Username",
+                                    value:
+                                        `kick.com/${username}`,
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Channel",
+                                    value:
+                                        `<#${channel.id}>`,
+                                    inline:
+                                        true
+                                }
+                            )
+                    ]
+                });
+            }
+
+            // ------------------------------------------------
+            // DISABLE
+            // ------------------------------------------------
+
+            if (
+                subcommand === "disable"
+            ) {
+
+                await KickConfig.findOneAndUpdate(
+                    {
+                        guildId:
+                            interaction.guild.id
+                    },
+                    {
+                        enabled:
+                            false
+                    },
+                    {
+                        upsert:
+                            true
+                    }
+                );
+
+                return interaction.reply({
+                    content:
+                        "🔴 KICK live alerts disabled."
+                });
+            }
+
+            // ------------------------------------------------
+            // CONFIG
+            // ------------------------------------------------
+
+            if (
+                subcommand === "config"
+            ) {
+
+                const config =
+                    await KickConfig.findOne({
+                        guildId:
+                            interaction.guild.id
+                    });
+
+                if (!config) {
+                    return interaction.reply({
+                        content:
+                            "❌ KICK is not configured.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+                return interaction.reply({
+                    embeds: [
+                        embed(0x53fc18)
+                            .setTitle(
+                                "🔴 KICK Configuration"
+                            )
+                            .addFields(
+                                {
+                                    name:
+                                        "Enabled",
+                                    value:
+                                        config.enabled
+                                            ? "🟢 Yes"
+                                            : "🔴 No",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Username",
+                                    value:
+                                        config.username ||
+                                        "Not configured",
+                                    inline:
+                                        true
+                                },
+                                {
+                                    name:
+                                        "Channel",
+                                    value:
+                                        config.channelId
+                                            ? `<#${config.channelId}>`
+                                            : "Not configured",
+                                    inline:
+                                        true
+                                }
+                            )
+                    ]
+                });
+            }
+        }
+
+        // ====================================================
+        // KICK LIVE CHECK
+        // ====================================================
+
+        if (
+            command === "livecheck"
+        ) {
+
+            await interaction.deferReply();
+
+            const config =
+                await KickConfig.findOne({
+                    guildId:
+                        interaction.guild.id
+                });
+
+            if (
+                !config?.username
+            ) {
+                return interaction.editReply({
+                    content:
+                        "❌ KICK is not configured."
+                });
+            }
+
+            try {
+
+                const response =
+                    await axios.get(
+                        `https://kick.com/api/v2/channels/${encodeURIComponent(
+                            config.username
+                        )}`,
                         {
-                            name: "Game / Category",
-                            value:
-                                category,
-                            inline: true
-                        },
-                        {
-                            name: "Viewers",
-                            value:
-                                String(
-                                    stream.viewer_count ||
-                                        0
-                                ),
-                            inline: true
-                        },
-                        {
-                            name: "Title",
-                            value:
-                                truncate(
-                                    stream.session_title ||
-                                        stream.title ||
-                                        "No title"
-                                )
+                            timeout:
+                                15000,
+                            headers: {
+                                "User-Agent":
+                                    "Mozilla/5.0",
+                                Accept:
+                                    "application/json"
+                            }
                         }
-                    )
-            ]
-        });
+                    );
+
+                const data =
+                    response.data;
+
+                const stream =
+                    data?.livestream ||
+                    null;
+
+                if (!stream) {
+
+                    return interaction.editReply({
+                        embeds: [
+                            embed(0x2b2d31)
+                                .setTitle(
+                                    "⚫ KICK Offline"
+                                )
+                                .setDescription(
+                                    `**${config.username}** is currently offline.`
+                                )
+                        ]
+                    });
+                }
+
+                // --------------------------------------------
+                // CATEGORY / GAME EXTRACTION
+                // --------------------------------------------
+
+                let category =
+                    "Unknown";
+
+                const possibleCategories = [
+                    stream?.category?.name,
+                    stream?.category?.title,
+                    stream?.category?.slug,
+                    stream?.game?.name,
+                    stream?.game?.title,
+                    stream?.game?.slug,
+                    data?.category?.name,
+                    data?.category?.title,
+                    data?.game?.name,
+                    data?.game?.title
+                ];
+
+                for (
+                    const value
+                    of possibleCategories
+                ) {
+
+                    if (
+                        value &&
+                        typeof value ===
+                            "string" &&
+                        value.trim()
+                    ) {
+                        category =
+                            value.trim();
+
+                        break;
+                    }
+                }
+
+                const title =
+                    stream?.session_title ||
+                    stream?.title ||
+                    "No stream title";
+
+                const viewers =
+                    stream?.viewer_count ??
+                    stream?.viewers ??
+                    0;
+
+                const thumbnail =
+                    stream?.thumbnail?.url ||
+                    stream?.thumbnail ||
+                    null;
+
+                const startedAt =
+                    stream?.created_at ||
+                    stream?.start_time ||
+                    null;
+
+                const fields = [
+                    {
+                        name:
+                            "🎮 Category / Game",
+                        value:
+                            category,
+                        inline:
+                            true
+                    },
+                    {
+                        name:
+                            "👀 Viewers",
+                        value:
+                            String(
+                                viewers
+                            ),
+                        inline:
+                            true
+                    },
+                    {
+                        name:
+                            "📺 Title",
+                        value:
+                            title
+                    }
+                ];
+
+                if (
+                    startedAt
+                ) {
+                    const timestamp =
+                        Math.floor(
+                            new Date(
+                                startedAt
+                            ).getTime() /
+                                1000
+                        );
+
+                    if (
+                        Number.isFinite(
+                            timestamp
+                        )
+                    ) {
+                        fields.push({
+                            name:
+                                "🔴 Started",
+                            value:
+                                `<t:${timestamp}:R>`,
+                            inline:
+                                true
+                        });
+                    }
+                }
+
+                const liveEmbed =
+                    embed(0x53fc18)
+                        .setTitle(
+                            "🔴 LIVE ON KICK"
+                        )
+                        .setURL(
+                            `https://kick.com/${config.username}`
+                        )
+                        .setDescription(
+                            `**${
+                                data?.name ||
+                                config.username
+                            }** is now live!`
+                        )
+                        .addFields(
+                            fields
+                        );
+
+                if (
+                    thumbnail
+                ) {
+                    liveEmbed.setImage(
+                        thumbnail
+                    );
+                }
+
+                return interaction.editReply({
+                    embeds: [
+                        liveEmbed
+                    ]
+                });
+
+            } catch (error) {
+
+                console.error(
+                    "KICK livecheck error:",
+                    error
+                );
+
+                return interaction.editReply({
+                    content:
+                        "❌ Failed to contact KICK right now."
+                });
+            }
+        }
+
+        // ====================================================
+        // ROLE INFO
+        // ====================================================
+
+        if (
+            command === "roleinfo"
+        ) {
+
+            const role =
+                interaction.options.getRole(
+                    "role"
+                );
+
+            return interaction.reply({
+                embeds: [
+                    embed(0x5865f2)
+                        .setTitle(
+                            `🎭 Role Info — ${role.name}`
+                        )
+                        .addFields(
+                            {
+                                name:
+                                    "ID",
+                                value:
+                                    `\`${role.id}\``,
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Color",
+                                value:
+                                    role.hexColor,
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Position",
+                                value:
+                                    String(
+                                        role.position
+                                    ),
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Members",
+                                value:
+                                    String(
+                                        role.members.size
+                                    ),
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Mentionable",
+                                value:
+                                    role.mentionable
+                                        ? "Yes"
+                                        : "No",
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Managed",
+                                value:
+                                    role.managed
+                                        ? "Yes"
+                                        : "No",
+                                inline:
+                                    true
+                            }
+                        )
+                ]
+            });
+        }
+
+        // ====================================================
+        // CHANNEL INFO
+        // ====================================================
+
+        if (
+            command === "channelinfo"
+        ) {
+
+            const channel =
+                interaction.options.getChannel(
+                    "channel"
+                ) ||
+                interaction.channel;
+
+            return interaction.reply({
+                embeds: [
+                    embed(0x5865f2)
+                        .setTitle(
+                            `📁 Channel Info — ${channel.name}`
+                        )
+                        .addFields(
+                            {
+                                name:
+                                    "ID",
+                                value:
+                                    `\`${channel.id}\``,
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Type",
+                                value:
+                                    String(
+                                        channel.type
+                                    ),
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Category",
+                                value:
+                                    channel.parent
+                                        ? channel.parent.name
+                                        : "None",
+                                inline:
+                                    true
+                            },
+                            {
+                                name:
+                                    "Created",
+                                value:
+                                    `<t:${Math.floor(
+                                        channel.createdTimestamp /
+                                            1000
+                                    )}:R>`,
+                                inline:
+                                    true
+                            }
+                        )
+                ]
+            });
+        }
+
     } catch (error) {
+
         console.error(
-            "livecheck error:",
+            "27Pro Part 4 interaction error:",
             error
         );
 
-        return interaction.editReply({
-            content:
-                "❌ Failed to check KICK right now."
-        });
-    }
-}
+        if (
+            interaction.isRepliable()
+        ) {
 
-// ============================================================
-// CHANNEL / ROLE INFO
-// ============================================================
-
-if (
-    command === "roleinfo"
-) {
-    const role =
-        interaction.options.getRole(
-            "role"
-        );
-
-    return interaction.reply({
-        embeds: [
-            embed(0x5865f2)
-                .setTitle(
-                    `🎭 Role Info — ${role.name}`
-                )
-                .addFields(
-                    {
-                        name: "ID",
-                        value:
-                            `\`${role.id}\``,
-                        inline: true
-                    },
-                    {
-                        name: "Color",
-                        value:
-                            role.hexColor,
-                        inline: true
-                    },
-                    {
-                        name: "Position",
-                        value:
-                            String(
-                                role.position
-                            ),
-                        inline: true
-                    },
-                    {
-                        name: "Members",
-                        value:
-                            String(
-                                role.members.size
-                            ),
-                        inline: true
-                    },
-                    {
-                        name: "Mentionable",
-                        value:
-                            String(
-                                role.mentionable
-                            ),
-                        inline: true
-                    },
-                    {
-                        name: "Managed",
-                        value:
-                            String(
-                                role.managed
-                            ),
-                        inline: true
-                    }
-                )
-        ]
-    });
-}
-
-if (
-    command === "channelinfo"
-) {
-    const channel =
-        interaction.options.getChannel(
-            "channel"
-        ) ||
-        interaction.channel;
-
-    return interaction.reply({
-        embeds: [
-            embed(0x5865f2)
-                .setTitle(
-                    `📁 Channel Info — ${channel.name}`
-                )
-                .addFields(
-                    {
-                        name: "ID",
-                        value:
-                            `\`${channel.id}\``,
-                        inline: true
-                    },
-                    {
-                        name: "Type",
-                        value:
-                            String(
-                                channel.type
-                            ),
-                        inline: true
-                    },
-                    {
-                        name: "Category",
-                        value:
-                            channel.parent
-                                ? channel.parent.name
-                                : "None",
-                        inline: true
-                    },
-                    {
-                        name: "Created",
-                        value:
-                            `<t:${Math.floor(
-                                channel.createdTimestamp /
-                                    1000
-                            )}:R>`,
-                        inline: true
-                    }
-                )
-        ]
-    });
-}
-
-// ============================================================
-// FINAL ERROR HANDLER FOR interactionCreate
-// ============================================================
-
-        } catch (error) {
-            console.error(
-                "interactionCreate error:",
-                error
+            await safeReply(
+                interaction,
+                {
+                    content:
+                        "❌ Something went wrong while processing that command."
+                }
             );
-
-            if (
-                interaction.isRepliable()
-            ) {
-                await safeReply(
-                    interaction,
-                    {
-                        content:
-                            "❌ Something went wrong while processing that command."
-                    }
-                );
-            }
         }
     }
-);
+});
 
 // ============================================================
-// GIVEAWAY / REMINDER RECOVERY
+// BACKGROUND SYSTEMS
 // ============================================================
 
-async function startBackgroundSystems() {
+async function start27ProBackgroundSystems() {
+
+    // --------------------------------------------------------
+    // GIVEAWAY RECOVERY
+    // --------------------------------------------------------
+
     try {
-        await restoreGiveaways();
+
+        if (
+            typeof restoreGiveaways ===
+            "function"
+        ) {
+            await restoreGiveaways();
+        }
+
     } catch (error) {
+
         console.error(
             "Giveaway recovery error:",
             error
         );
     }
 
+    // --------------------------------------------------------
+    // REMINDER RECOVERY
+    // --------------------------------------------------------
+
     try {
-        await restoreReminders();
+
+        if (
+            typeof restoreReminders ===
+            "function"
+        ) {
+            await restoreReminders();
+        }
+
     } catch (error) {
+
         console.error(
             "Reminder recovery error:",
             error
@@ -9330,114 +10398,10 @@ async function startBackgroundSystems() {
 }
 
 // ============================================================
-// RAID MODE CLEANUP
+// KICK CHECKER
 // ============================================================
 
-setInterval(
-    async () => {
-        try {
-            const now =
-                Date.now();
-
-            for (
-                const [
-                    guildId,
-                    timestamps
-                ]
-                of raidTracker
-            ) {
-                const filtered =
-                    timestamps.filter(
-                        timestamp =>
-                            now -
-                                timestamp <
-                            30000
-                    );
-
-                if (
-                    filtered.length
-                ) {
-                    raidTracker.set(
-                        guildId,
-                        filtered
-                    );
-                } else {
-                    raidTracker.delete(
-                        guildId
-                    );
-                }
-
-                const guild =
-                    client.guilds.cache.get(
-                        guildId
-                    );
-
-                if (!guild) {
-                    continue;
-                }
-
-                const security =
-                    await getSecurity(
-                        guildId
-                    );
-
-                if (
-                    security.raidMode &&
-                    filtered.length === 0
-                ) {
-                    security.raidMode =
-                        false;
-
-                    await security.save();
-
-                    await sendLog(
-                        guild,
-                        "security",
-                        embed(0x57f287)
-                            .setTitle(
-                                "✅ Raid Mode Deactivated"
-                            )
-                            .setDescription(
-                                "No new raid activity was detected during the monitoring window."
-                            )
-                    );
-                }
-            }
-        } catch (error) {
-            console.error(
-                "Raid cleanup error:",
-                error
-            );
-        }
-    },
-    30000
-);
-
-// ============================================================
-// KICK CHECKER LOOP
-// ============================================================
-
-function startKickChecker() {
-    if (
-        checkerRunning
-    ) {
-        return;
-    }
-
-    checkerRunning =
-        true;
-
-    checkKickChannels()
-        .catch(error => {
-            console.error(
-                "Initial KICK check error:",
-                error
-            );
-        })
-        .finally(() => {
-            checkerRunning =
-                false;
-        });
+function start27ProKickChecker() {
 
     if (
         checkerInterval
@@ -9450,6 +10414,7 @@ function startKickChecker() {
     checkerInterval =
         setInterval(
             async () => {
+
                 if (
                     checkerRunning
                 ) {
@@ -9460,18 +10425,33 @@ function startKickChecker() {
                     true;
 
                 try {
+
                     await checkKickChannels();
+
                 } catch (error) {
+
                     console.error(
                         "KICK checker error:",
                         error
                     );
+
                 } finally {
+
                     checkerRunning =
                         false;
                 }
+
             },
             60000
+        );
+
+    checkKickChannels()
+        .catch(
+            error =>
+                console.error(
+                    "Initial KICK check error:",
+                    error
+                )
         );
 }
 
@@ -9481,33 +10461,45 @@ function startKickChecker() {
 
 const healthServer =
     http.createServer(
-        async (req, res) => {
+        (req, res) => {
+
             try {
+
                 if (
                     req.url ===
                     "/health"
                 ) {
-                    const payload = {
+
+                    const result = {
                         status:
-                            "online",
+                            "ok",
+
                         bot:
                             client.user
                                 ? "connected"
                                 : "connecting",
-                        uptime:
-                            process.uptime(),
-                        discordUptime:
-                            client.uptime,
+
+                        botTag:
+                            client.user
+                                ? client.user.tag
+                                : null,
+
                         guilds:
                             client.guilds.cache.size,
+
                         ping:
                             client.ws.ping,
+
+                        uptime:
+                            process.uptime(),
+
                         mongo:
                             mongoose.connection
                                 .readyState ===
                             1
                                 ? "connected"
                                 : "disconnected",
+
                         timestamp:
                             new Date().toISOString()
                     };
@@ -9524,7 +10516,7 @@ const healthServer =
 
                     return res.end(
                         JSON.stringify(
-                            payload
+                            result
                         )
                     );
                 }
@@ -9533,11 +10525,12 @@ const healthServer =
                     req.url ===
                     "/"
                 ) {
+
                     res.writeHead(
                         200,
                         {
                             "Content-Type":
-                                "text/plain"
+                                "text/plain; charset=utf-8"
                         }
                     );
 
@@ -9547,13 +10540,19 @@ const healthServer =
                 }
 
                 res.writeHead(
-                    404
+                    404,
+                    {
+                        "Content-Type":
+                            "text/plain"
+                    }
                 );
 
                 return res.end(
                     "Not Found"
                 );
+
             } catch (error) {
+
                 console.error(
                     "Health server error:",
                     error
@@ -9571,14 +10570,42 @@ const healthServer =
     );
 
 // ============================================================
-// PROCESS ERROR HANDLING
+// HEALTH SERVER ERROR
+// ============================================================
+
+healthServer.on(
+    "error",
+    error => {
+
+        if (
+            error.code ===
+            "EADDRINUSE"
+        ) {
+
+            console.error(
+                `[27Pro] Port ${PORT} is already in use.`
+            );
+
+            return;
+        }
+
+        console.error(
+            "Health server error:",
+            error
+        );
+    }
+);
+
+// ============================================================
+// PROCESS ERROR HANDLERS
 // ============================================================
 
 process.on(
     "unhandledRejection",
     error => {
+
         console.error(
-            "UNHANDLED REJECTION:",
+            "[27Pro] UNHANDLED REJECTION:",
             error
         );
     }
@@ -9587,8 +10614,9 @@ process.on(
 process.on(
     "uncaughtException",
     error => {
+
         console.error(
-            "UNCAUGHT EXCEPTION:",
+            "[27Pro] UNCAUGHT EXCEPTION:",
             error
         );
     }
@@ -9597,8 +10625,9 @@ process.on(
 client.on(
     "error",
     error => {
+
         console.error(
-            "Discord client error:",
+            "[27Pro] Discord client error:",
             error
         );
     }
@@ -9607,19 +10636,10 @@ client.on(
 client.on(
     "warn",
     warning => {
-        console.warn(
-            "Discord warning:",
-            warning
-        );
-    }
-);
 
-client.on(
-    "shardError",
-    error => {
-        console.error(
-            "Discord shard error:",
-            error
+        console.warn(
+            "[27Pro] Discord warning:",
+            warning
         );
     }
 );
@@ -9628,12 +10648,10 @@ client.on(
 // GRACEFUL SHUTDOWN
 // ============================================================
 
-let shuttingDown =
-    false;
-
-async function shutdown(
+async function shutdown27Pro(
     signal
 ) {
+
     if (
         shuttingDown
     ) {
@@ -9644,13 +10662,19 @@ async function shutdown(
         true;
 
     console.log(
-        `\n[27Pro] ${signal} received. Shutting down...`
+        `[27Pro] ${signal} received. Shutting down...`
     );
 
     try {
+
+        // ----------------------------------------------------
+        // KICK TIMER
+        // ----------------------------------------------------
+
         if (
             checkerInterval
         ) {
+
             clearInterval(
                 checkerInterval
             );
@@ -9659,33 +10683,61 @@ async function shutdown(
                 null;
         }
 
-        for (
-            const timer
-            of giveawayTimers.values()
-        ) {
-            clearTimeout(
-                timer
-            );
-        }
-
-        giveawayTimers.clear();
-
-        for (
-            const timer
-            of reminderTimers.values()
-        ) {
-            clearTimeout(
-                timer
-            );
-        }
-
-        reminderTimers.clear();
+        // ----------------------------------------------------
+        // GIVEAWAY TIMERS
+        // ----------------------------------------------------
 
         if (
-            healthServer
+            giveawayTimers &&
+            giveawayTimers.size
         ) {
+
+            for (
+                const timer
+                of giveawayTimers.values()
+            ) {
+
+                clearTimeout(
+                    timer
+                );
+            }
+
+            giveawayTimers.clear();
+        }
+
+        // ----------------------------------------------------
+        // REMINDER TIMERS
+        // ----------------------------------------------------
+
+        if (
+            reminderTimers &&
+            reminderTimers.size
+        ) {
+
+            for (
+                const timer
+                of reminderTimers.values()
+            ) {
+
+                clearTimeout(
+                    timer
+                );
+            }
+
+            reminderTimers.clear();
+        }
+
+        // ----------------------------------------------------
+        // HTTP SERVER
+        // ----------------------------------------------------
+
+        if (
+            healthServer.listening
+        ) {
+
             await new Promise(
                 resolve => {
+
                     healthServer.close(
                         () =>
                             resolve()
@@ -9696,21 +10748,30 @@ async function shutdown(
             );
         }
 
-        if (
-            client
-        ) {
-            client.destroy();
-        }
+        // ----------------------------------------------------
+        // DISCORD
+        // ----------------------------------------------------
 
-        if (
-            mongoose.connection
-        ) {
-            await mongoose.connection
-                .close(false)
-                .catch(
-                    () => {}
-                );
-        }
+        try {
+            client.destroy();
+        } catch {}
+
+        // ----------------------------------------------------
+        // MONGODB
+        // ----------------------------------------------------
+
+        try {
+
+            if (
+                mongoose.connection.readyState !==
+                0
+            ) {
+
+                await mongoose.connection
+                    .close();
+            }
+
+        } catch {}
 
         console.log(
             "[27Pro] Shutdown complete."
@@ -9719,9 +10780,11 @@ async function shutdown(
         process.exit(
             0
         );
+
     } catch (error) {
+
         console.error(
-            "Shutdown error:",
+            "[27Pro] Shutdown error:",
             error
         );
 
@@ -9731,10 +10794,14 @@ async function shutdown(
     }
 }
 
+// ============================================================
+// SIGNALS
+// ============================================================
+
 process.once(
     "SIGINT",
     () =>
-        shutdown(
+        shutdown27Pro(
             "SIGINT"
         )
 );
@@ -9742,7 +10809,7 @@ process.once(
 process.once(
     "SIGTERM",
     () =>
-        shutdown(
+        shutdown27Pro(
             "SIGTERM"
         )
 );
@@ -9750,14 +10817,19 @@ process.once(
 // ============================================================
 // STARTUP
 // ============================================================
+//
+// IMPORTANT:
+// This is the ONLY startup section in Part 4.
+// ============================================================
 
-async function startBot() {
+async function start27Pro() {
+
     console.log(
         "============================================================"
     );
 
     console.log(
-        "27Pro - Advanced Discord Bot"
+        "27Pro - Advanced All-In-One Discord Bot"
     );
 
     console.log(
@@ -9765,7 +10837,7 @@ async function startBot() {
     );
 
     // --------------------------------------------------------
-    // ENV CHECK
+    // ENVIRONMENT
     // --------------------------------------------------------
 
     if (!TOKEN) {
@@ -9807,7 +10879,7 @@ async function startBot() {
     );
 
     // --------------------------------------------------------
-    // HEALTH SERVER
+    // HTTP HEALTH SERVER
     // --------------------------------------------------------
 
     const port =
@@ -9815,38 +10887,65 @@ async function startBot() {
             PORT
         ) || 5500;
 
-    await new Promise(
-        (resolve, reject) => {
-            healthServer.once(
-                "error",
-                reject
-            );
+    if (
+        !healthServer.listening
+    ) {
 
-            healthServer.listen(
-                port,
-                "0.0.0.0",
-                () => {
-                    healthServer.removeListener(
-                        "error",
-                        reject
-                    );
+        await new Promise(
+            (resolve, reject) => {
 
-                    console.log(
-                        `[27Pro] Health server listening on port ${port}`
-                    );
+                const onError =
+                    error => {
 
-                    resolve();
-                }
-            );
-        }
-    );
+                        healthServer.removeListener(
+                            "listening",
+                            onListening
+                        );
+
+                        reject(
+                            error
+                        );
+                    };
+
+                const onListening =
+                    () => {
+
+                        healthServer.removeListener(
+                            "error",
+                            onError
+                        );
+
+                        resolve();
+                    };
+
+                healthServer.once(
+                    "error",
+                    onError
+                );
+
+                healthServer.once(
+                    "listening",
+                    onListening
+                );
+
+                healthServer.listen(
+                    port,
+                    "0.0.0.0"
+                );
+            }
+        );
+
+        console.log(
+            `[27Pro] Health server listening on port ${port}`
+        );
+    }
 
     // --------------------------------------------------------
-    // DISCORD LOGIN
+    // DISCORD
     // --------------------------------------------------------
 
     console.log(
-        "[27Pro] Connecting to Discord..."
+        "[27Pro] Logging into Discord..."
     );
 
     await client.login(
@@ -9861,21 +10960,23 @@ async function startBot() {
 client.once(
     "ready",
     async () => {
+
         try {
+
             console.log(
                 "============================================================"
             );
 
             console.log(
-                `27Pro is online as ${client.user.tag}`
+                `[27Pro] Logged in as ${client.user.tag}`
             );
 
             console.log(
-                `Servers: ${client.guilds.cache.size}`
+                `[27Pro] Guilds: ${client.guilds.cache.size}`
             );
 
             console.log(
-                `Ping: ${client.ws.ping}ms`
+                `[27Pro] Ping: ${client.ws.ping}ms`
             );
 
             console.log(
@@ -9896,33 +10997,43 @@ client.once(
                     }
                 ],
                 status:
-                    "dnd"
+                    "online"
             });
 
             // ------------------------------------------------
-            // REGISTER GLOBAL COMMANDS
+            // GLOBAL SLASH COMMANDS
             // ------------------------------------------------
 
             await registerCommands();
 
+            console.log(
+                "[27Pro] Global slash commands registered."
+            );
+
             // ------------------------------------------------
-            // RESTORE PERSISTENT SYSTEMS
+            // DATABASE RECOVERY
             // ------------------------------------------------
 
-            await startBackgroundSystems();
+            await start27ProBackgroundSystems();
 
             // ------------------------------------------------
             // KICK
             // ------------------------------------------------
 
-            startKickChecker();
+            start27ProKickChecker();
 
             console.log(
-                "[27Pro] All systems started."
+                "[27Pro] KICK checker started."
             );
+
+            console.log(
+                "[27Pro] All systems are online."
+            );
+
         } catch (error) {
+
             console.error(
-                "Ready initialization error:",
+                "[27Pro] Ready initialization error:",
                 error
             );
         }
@@ -9930,37 +11041,55 @@ client.once(
 );
 
 // ============================================================
-// START EVERYTHING
+// BOOT
 // ============================================================
 
-startBot().catch(
-    async error => {
-        console.error(
-            "============================================================"
-        );
+start27Pro()
+    .catch(
+        async error => {
 
-        console.error(
-            "[27Pro] FATAL STARTUP ERROR"
-        );
+            console.error(
+                "============================================================"
+            );
 
-        console.error(
-            error
-        );
+            console.error(
+                "[27Pro] FATAL STARTUP ERROR"
+            );
 
-        console.error(
-            "============================================================"
-        );
+            console.error(
+                error
+            );
 
-        try {
-            await mongoose.connection
-                .close()
-                .catch(
-                    () => {}
-                );
-        } catch {}
+            console.error(
+                "============================================================"
+            );
 
-        process.exit(
-            1
-        );
-    }
-);
+            try {
+
+                if (
+                    healthServer.listening
+                ) {
+
+                    healthServer.close();
+                }
+
+            } catch {}
+
+            try {
+
+                if (
+                    mongoose.connection.readyState !==
+                    0
+                ) {
+
+                    await mongoose.connection
+                        .close();
+                }
+
+            } catch {}
+
+            process.exit(
+                1
+            );
+        }
+    );
