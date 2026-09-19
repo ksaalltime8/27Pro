@@ -10928,7 +10928,7 @@ client.once(
                 activities: [
                     {
                         name:
-                            `${client.guilds.cache.size} servers`,
+                            `${client.guilds.cache.size} servers . /help`,
                         type:
                             ActivityType.Watching
                     }
