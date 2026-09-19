@@ -11196,207 +11196,243 @@ if (
 
 
 // ============================================================
-// 27PRO RULES DROPDOWN
+// 27PRO RULES DROPDOWN HANDLER
 // ============================================================
 
-if (
-    interaction.isStringSelectMenu() &&
-    interaction.customId === "rules:select"
-) {
+client.on(
+    "interactionCreate",
+    async interaction => {
 
-    // --------------------------------------------------------
-    // ACKNOWLEDGE THE INTERACTION IMMEDIATELY
-    // --------------------------------------------------------
-
-    try {
-
-        await interaction.deferReply({
-            flags: MessageFlags.Ephemeral
-        });
-
-    } catch (error) {
-
-        console.error(
-            "[27Pro] RULES DROPDOWN ACK ERROR:",
-            error
-        );
-
-        return;
-    }
-
-    try {
-
-        // ----------------------------------------------------
-        // GET SELECTED RULE
-        // ----------------------------------------------------
-
-        const selected =
-            interaction.values?.[0];
+        // --------------------------------------------------------
+        // ONLY HANDLE THE RULES DROPDOWN
+        // --------------------------------------------------------
 
         if (
-            !selected ||
-            !selected.startsWith(
-                "rules:view:"
-            )
+            !interaction.isStringSelectMenu() ||
+            interaction.customId !== "rules:select"
         ) {
-
-            return interaction.editReply({
-                content:
-                    "❌ Invalid rule selection."
-            });
+            return;
         }
 
-        // ----------------------------------------------------
-        // GET RULE ID
-        // ----------------------------------------------------
-
-        const ruleId =
-            selected
-                .replace(
-                    "rules:view:",
-                    ""
-                )
-                .trim();
-
-        // ----------------------------------------------------
-        // SERVER CHECK
-        // ----------------------------------------------------
-
-        if (
-            !interaction.guild
-        ) {
-
-            return interaction.editReply({
-                content:
-                    "❌ This can only be used inside a server."
-            });
-        }
-
-        // ----------------------------------------------------
-        // LOAD RULES
-        // ----------------------------------------------------
-
-        const config =
-            await RulesConfig.findOne({
-                guildId:
-                    interaction.guild.id
-            });
-
-        if (
-            !config
-        ) {
-
-            return interaction.editReply({
-                content:
-                    "❌ The rules system is not configured."
-            });
-        }
-
-        // ----------------------------------------------------
-        // SAFETY
-        // ----------------------------------------------------
-
-        if (
-            !Array.isArray(
-                config.rules
-            )
-        ) {
-
-            return interaction.editReply({
-                content:
-                    "❌ The server rules configuration is invalid."
-            });
-        }
-
-        // ----------------------------------------------------
-        // FIND RULE
-        // ----------------------------------------------------
-
-        const rule =
-            config.rules.find(
-                item =>
-                    String(
-                        item.id
-                    ).toUpperCase() ===
-                    String(
-                        ruleId
-                    ).toUpperCase()
-            );
-
-        if (
-            !rule
-        ) {
-
-            return interaction.editReply({
-                content:
-                    "❌ That rule no longer exists."
-            });
-        }
-
-        // ----------------------------------------------------
-        // BUILD EMBED
-        // ----------------------------------------------------
-
-        const ruleEmbed =
-            new EmbedBuilder()
-
-                .setColor(
-                    config.color ||
-                    0x5865f2
-                )
-
-                .setTitle(
-                    `${rule.emoji || "📌"} ${rule.title || "Server Rule"}`
-                )
-
-                .setDescription(
-                    rule.description ||
-                    "No description provided."
-                )
-
-                .setFooter({
-                    text:
-                        `${config.footer || "27Pro • Server Rules"} • Rule ${rule.id}`
-                })
-
-                .setTimestamp();
-
-        // ----------------------------------------------------
-        // SEND RESULT
-        // ----------------------------------------------------
-
-        return interaction.editReply({
-            embeds: [
-                ruleEmbed
-            ]
-        });
-
-    } catch (error) {
-
-        console.error(
-            "[27Pro] RULES DROPDOWN ERROR:",
-            error
+        console.log(
+            `[27Pro] Rules dropdown received from ${interaction.user.tag}`
         );
 
         try {
 
-            return interaction.editReply({
-                content:
-                    `❌ Failed to display the rule.\n\n` +
-                    `\`${String(
-                        error?.message ||
-                        error
-                    ).slice(
-                        0,
-                        1000
-                    )}\``,
-                embeds: []
+            // ----------------------------------------------------
+            // ACKNOWLEDGE IMMEDIATELY
+            // ----------------------------------------------------
+
+            await interaction.deferReply({
+                flags:
+                    MessageFlags.Ephemeral
             });
 
-        } catch {}
+            console.log(
+                "[27Pro] Rules dropdown acknowledged."
+            );
 
+            // ----------------------------------------------------
+            // GET SELECTION
+            // ----------------------------------------------------
+
+            const selected =
+                interaction.values?.[0];
+
+            if (
+                !selected
+            ) {
+
+                return interaction.editReply({
+                    content:
+                        "❌ No rule was selected."
+                });
+            }
+
+            console.log(
+                `[27Pro] Selected rule value: ${selected}`
+            );
+
+            // ----------------------------------------------------
+            // VALIDATE VALUE
+            // ----------------------------------------------------
+
+            if (
+                !selected.startsWith(
+                    "rules:view:"
+                )
+            ) {
+
+                return interaction.editReply({
+                    content:
+                        "❌ Invalid rules selection."
+                });
+            }
+
+            const ruleId =
+                selected
+                    .substring(
+                        "rules:view:".length
+                    )
+                    .trim();
+
+            // ----------------------------------------------------
+            // SERVER CHECK
+            // ----------------------------------------------------
+
+            if (
+                !interaction.guild
+            ) {
+
+                return interaction.editReply({
+                    content:
+                        "❌ This can only be used inside a server."
+                });
+            }
+
+            // ----------------------------------------------------
+            // LOAD CONFIG
+            // ----------------------------------------------------
+
+            console.log(
+                `[27Pro] Loading rules for guild ${interaction.guild.id}...`
+            );
+
+            const config =
+                await RulesConfig.findOne({
+                    guildId:
+                        interaction.guild.id
+                });
+
+            if (
+                !config
+            ) {
+
+                return interaction.editReply({
+                    content:
+                        "❌ Rules are not configured for this server."
+                });
+            }
+
+            // ----------------------------------------------------
+            // FIND RULE
+            // ----------------------------------------------------
+
+            const rules =
+                Array.isArray(config.rules)
+                    ? config.rules
+                    : [];
+
+            const rule =
+                rules.find(
+                    item =>
+                        String(
+                            item.id
+                        ).toUpperCase() ===
+                        String(
+                            ruleId
+                        ).toUpperCase()
+                );
+
+            if (
+                !rule
+            ) {
+
+                return interaction.editReply({
+                    content:
+                        `❌ Rule \`${ruleId}\` no longer exists.`
+                });
+            }
+
+            // ----------------------------------------------------
+            // BUILD EMBED
+            // ----------------------------------------------------
+
+            const embed =
+                new EmbedBuilder()
+                    .setColor(
+                        config.color ||
+                        0x5865f2
+                    )
+                    .setTitle(
+                        `${rule.emoji || "📌"} ${rule.title || "Server Rule"}`
+                    )
+                    .setDescription(
+                        rule.description ||
+                        "No description provided."
+                    )
+                    .setFooter({
+                        text:
+                            `${config.footer || "27Pro • Server Rules"} • Rule ${rule.id}`
+                    })
+                    .setTimestamp();
+
+            // ----------------------------------------------------
+            // SEND RULE
+            // ----------------------------------------------------
+
+            await interaction.editReply({
+                embeds: [
+                    embed
+                ],
+                content:
+                    null
+            });
+
+            console.log(
+                `[27Pro] Successfully displayed rule ${rule.id}.`
+            );
+
+        } catch (error) {
+
+            console.error(
+                "[27Pro] RULES DROPDOWN ERROR:",
+                error
+            );
+
+            try {
+
+                if (
+                    interaction.deferred
+                ) {
+
+                    await interaction.editReply({
+                        content:
+                            `❌ Failed to display this rule.\n\`${String(
+                                error?.message ||
+                                error
+                            ).slice(
+                                0,
+                                1000
+                            )}\``,
+                        embeds: []
+                    });
+
+                } else if (
+                    !interaction.replied
+                ) {
+
+                    await interaction.reply({
+                        content:
+                            "❌ Failed to display this rule.",
+                        flags:
+                            MessageFlags.Ephemeral
+                    });
+                }
+
+            } catch (
+                replyError
+            ) {
+
+                console.error(
+                    "[27Pro] Rules error reply failed:",
+                    replyError
+                );
+            }
+        }
     }
-}
+);
         // ====================================================
         // KICK LIVE
         // ====================================================
