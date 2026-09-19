@@ -11925,6 +11925,7 @@ client.on(
 // ============================================================
 
 async function shutdown27Pro(signal) {
+
     if (shuttingDown) {
         return;
     }
@@ -11936,7 +11937,11 @@ async function shutdown27Pro(signal) {
     );
 
     try {
-        // Stop KICK checker
+
+        // ----------------------------------------------------
+        // KICK CHECKER
+        // ----------------------------------------------------
+
         if (checkerInterval) {
             clearInterval(checkerInterval);
             checkerInterval = null;
@@ -11948,57 +11953,6 @@ async function shutdown27Pro(signal) {
         }
 
         checkerRunning = false;
-
-        // Close health server
-        if (server) {
-            await new Promise(resolve => {
-                server.close(() => {
-                    resolve();
-                });
-            }).catch(() => {});
-        }
-
-        // Disconnect MongoDB
-        if (
-            mongoose.connection.readyState !== 0
-        ) {
-            await mongoose.connection
-                .close()
-                .catch(() => {});
-        }
-
-        // Destroy Discord client
-        if (client) {
-            client.destroy();
-        }
-
-        console.log(
-            "[27Pro] Shutdown complete."
-        );
-
-    } catch (error) {
-        console.error(
-            "[27Pro] Shutdown error:",
-            error
-        );
-    }
-}
-
-        // ----------------------------------------------------
-        // KICK TIMER
-        // ----------------------------------------------------
-
-        if (
-            checkerInterval
-        ) {
-
-            clearInterval(
-                checkerInterval
-            );
-
-            checkerInterval =
-                null;
-        }
 
         // ----------------------------------------------------
         // GIVEAWAY TIMERS
@@ -12013,10 +11967,7 @@ async function shutdown27Pro(signal) {
                 const timer
                 of giveawayTimers.values()
             ) {
-
-                clearTimeout(
-                    timer
-                );
+                clearTimeout(timer);
             }
 
             giveawayTimers.clear();
@@ -12035,34 +11986,29 @@ async function shutdown27Pro(signal) {
                 const timer
                 of reminderTimers.values()
             ) {
-
-                clearTimeout(
-                    timer
-                );
+                clearTimeout(timer);
             }
 
             reminderTimers.clear();
         }
 
         // ----------------------------------------------------
-        // HTTP SERVER
+        // HEALTH SERVER
         // ----------------------------------------------------
 
         if (
+            typeof healthServer !== "undefined" &&
+            healthServer &&
             healthServer.listening
         ) {
 
-            await new Promise(
-                resolve => {
+            await new Promise(resolve => {
 
-                    healthServer.close(
-                        () =>
-                            resolve()
-                    );
-                }
-            ).catch(
-                () => {}
-            );
+                healthServer.close(() => {
+                    resolve();
+                });
+
+            }).catch(() => {});
         }
 
         // ----------------------------------------------------
@@ -12070,8 +12016,18 @@ async function shutdown27Pro(signal) {
         // ----------------------------------------------------
 
         try {
-            client.destroy();
-        } catch {}
+
+            if (client) {
+                client.destroy();
+            }
+
+        } catch (error) {
+
+            console.warn(
+                "[27Pro] Discord shutdown warning:",
+                error.message
+            );
+        }
 
         // ----------------------------------------------------
         // MONGODB
@@ -12080,23 +12036,26 @@ async function shutdown27Pro(signal) {
         try {
 
             if (
-                mongoose.connection.readyState !==
-                0
+                mongoose.connection &&
+                mongoose.connection.readyState !== 0
             ) {
 
-                await mongoose.connection
-                    .close();
+                await mongoose.connection.close();
             }
 
-        } catch {}
+        } catch (error) {
+
+            console.warn(
+                "[27Pro] MongoDB shutdown warning:",
+                error.message
+            );
+        }
 
         console.log(
             "[27Pro] Shutdown complete."
         );
 
-        process.exit(
-            0
-        );
+        process.exit(0);
 
     } catch (error) {
 
@@ -12105,38 +12064,29 @@ async function shutdown27Pro(signal) {
             error
         );
 
-        process.exit(
-            1
-        );
+        process.exit(1);
     }
 }
 
 // ============================================================
-// SIGNALS
+// PROCESS SIGNALS
 // ============================================================
 
 process.once(
     "SIGINT",
-    () =>
-        shutdown27Pro(
-            "SIGINT"
-        )
+    () => {
+        shutdown27Pro("SIGINT");
+    }
 );
 
 process.once(
     "SIGTERM",
-    () =>
-        shutdown27Pro(
-            "SIGTERM"
-        )
+    () => {
+        shutdown27Pro("SIGTERM");
+    }
 );
-
 // ============================================================
 // STARTUP
-// ============================================================
-//
-// IMPORTANT:
-// This is the ONLY startup section in Part 4.
 // ============================================================
 
 async function start27Pro() {
