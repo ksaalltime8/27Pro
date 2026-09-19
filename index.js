@@ -895,7 +895,11 @@ const commands = [
     new SlashCommandBuilder()
         .setName("help")
         .setDescription("Show the 27Pro command center"),
-
+    
+     new SlashCommandBuilder()
+        .setName("rules")
+        .setDescription("Display the server rules"),
+    
     new SlashCommandBuilder()
         .setName("ping")
         .setDescription("Check bot latency"),
