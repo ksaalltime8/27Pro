@@ -1760,11 +1760,6 @@ const commandJSON =
         command.toJSON()
     );
 
-    // ============================================================
-// 27PRO - PART 2/4
-// CORE SYSTEMS
-// ============================================================
-
 // ============================================================
 // GLOBAL COMMAND REGISTRATION
 // ============================================================
@@ -1777,31 +1772,84 @@ async function registerCommands() {
             version: "10"
         }).setToken(TOKEN);
 
-        // Remove duplicate slash commands by name + type
+        // ====================================================
+        // REMOVE OLD GUILD-SPECIFIC COMMANDS
+        // ====================================================
+
+        console.log(
+            "[27Pro] Cleaning old guild slash commands..."
+        );
+
+        for (const guild of client.guilds.cache.values()) {
+
+            try {
+
+                await rest.put(
+                    Routes.applicationGuildCommands(
+                        CLIENT_ID,
+                        guild.id
+                    ),
+                    {
+                        body: []
+                    }
+                );
+
+                console.log(
+                    `[27Pro] Cleared guild commands: ${guild.name} (${guild.id})`
+                );
+
+            } catch (error) {
+
+                console.error(
+                    `[27Pro] Failed to clear commands from ${guild.name}:`,
+                    error.message
+                );
+            }
+        }
+
+        // ====================================================
+        // REMOVE DUPLICATES FROM COMMAND ARRAY
+        // ====================================================
+
         const uniqueCommands = [];
         const seenCommands = new Set();
 
         for (const command of commands) {
 
-            const json = command.toJSON();
+            try {
 
-            const key =
-                `${json.type || 1}:${json.name}`;
+                const json = command.toJSON();
 
-            if (seenCommands.has(key)) {
-                console.warn(
-                    `[27Pro] Removed duplicate command: /${json.name}`
+                const key =
+                    `${json.type || 1}:${json.name}`;
+
+                if (seenCommands.has(key)) {
+
+                    console.warn(
+                        `[27Pro] Duplicate removed: /${json.name}`
+                    );
+
+                    continue;
+                }
+
+                seenCommands.add(key);
+                uniqueCommands.push(json);
+
+            } catch (error) {
+
+                console.error(
+                    "[27Pro] Invalid command found:",
+                    error
                 );
-
-                continue;
             }
-
-            seenCommands.add(key);
-            uniqueCommands.push(json);
         }
 
+        // ====================================================
+        // REGISTER GLOBAL COMMANDS ONLY
+        // ====================================================
+
         console.log(
-            `[27Pro] Registering ${uniqueCommands.length} unique slash commands...`
+            `[27Pro] Registering ${uniqueCommands.length} global commands...`
         );
 
         await rest.put(
@@ -1812,7 +1860,7 @@ async function registerCommands() {
         );
 
         console.log(
-            `[27Pro] Successfully registered ${uniqueCommands.length} global slash commands.`
+            `[27Pro] Successfully registered ${uniqueCommands.length} global commands.`
         );
 
     } catch (error) {
@@ -2600,157 +2648,108 @@ async function ticketStaff(
 // TICKET TRANSCRIPT
 // ============================================================
 
-async function createTranscript(
-    channel
-) {
+async function createTicketTranscript(channel) {
+
     const messages = [];
+
     let lastId = null;
 
-    for (let i = 0; i < 10; i++) {
-        const fetched =
-            await channel.messages.fetch({
-                limit: 100,
-                before: lastId || undefined
-            });
+    while (true) {
 
-        if (!fetched.size) {
+        const options = {
+            limit: 100
+        };
+
+        if (lastId) {
+            options.before = lastId;
+        }
+
+        const batch =
+            await channel.messages.fetch(options);
+
+        if (!batch.size) {
             break;
         }
 
         messages.push(
-            ...fetched.values()
+            ...batch.values()
         );
 
         lastId =
-            fetched.last().id;
+            batch.last().id;
 
-        if (
-            fetched.size < 100
-        ) {
+        if (batch.size < 100) {
             break;
         }
     }
 
-    messages.sort(
-        (a, b) =>
-            a.createdTimestamp -
-            b.createdTimestamp
-    );
+    messages.reverse();
 
-    let output =
+    let transcript = "";
+
+    transcript +=
         `27Pro Ticket Transcript\n`;
 
-    output +=
+    transcript +=
+        `========================================\n`;
+
+    transcript +=
         `Server: ${channel.guild.name}\n`;
 
-    output +=
-        `Channel: ${channel.name}\n`;
+    transcript +=
+        `Channel: #${channel.name}\n`;
 
-    output +=
-        `Generated: ${new Date().toISOString()}\n`;
+    transcript +=
+        `Created: ${new Date().toISOString()}\n`;
 
-    output +=
+    transcript +=
+        `Messages: ${messages.length}\n`;
+
+    transcript +=
         `========================================\n\n`;
 
-    for (
-        const message of messages
-    ) {
-        const date =
-            new Date(
-                message.createdTimestamp
-            ).toISOString();
+    for (const message of messages) {
 
-        output +=
-            `[${date}] ${message.author.tag}: ${message.content || ""}`;
+        const timestamp =
+            message.createdAt
+                .toISOString();
 
-        if (
-            message.attachments.size
-        ) {
-            output +=
-                ` [Attachments: ${[
-                    ...message.attachments.values()
-                ].map(a => a.url).join(", ")}]`;
+        const author =
+            message.author
+                ? `${message.author.tag} (${message.author.id})`
+                : "Unknown User";
+
+        let content =
+            message.content || "";
+
+        if (message.attachments.size) {
+
+            const attachments =
+                message.attachments
+                    .map(
+                        attachment =>
+                            `[Attachment: ${attachment.url}]`
+                    )
+                    .join("\n");
+
+            content +=
+                content
+                    ? `\n${attachments}`
+                    : attachments;
         }
 
-        output += "\n";
-    }
+        transcript +=
+            `[${timestamp}] ${author}\n`;
 
-    // Avoid enormous attachments.
-    if (
-        Buffer.byteLength(output, "utf8") >
-        7_500_000
-    ) {
-        output =
-            output.slice(
-                0,
-                7_400_000
-            ) +
-            "\n\n[Transcript truncated]";
+        transcript +=
+            `${content}\n\n`;
     }
 
     return Buffer.from(
-        output,
+        transcript,
         "utf8"
     );
 }
-
-async function sendTicketTranscript(
-    guild,
-    ticket,
-    channel
-) {
-    const config =
-        await getTickets(
-            guild.id
-        );
-
-    const buffer =
-        await createTranscript(
-            channel
-        );
-
-    const attachment =
-        new AttachmentBuilder(
-            buffer,
-            {
-                name:
-                    `${channel.name}-transcript.txt`
-            }
-        );
-
-    let target = null;
-
-    if (
-        config.transcriptChannelId
-    ) {
-        target =
-            guild.channels.cache.get(
-                config.transcriptChannelId
-            );
-    }
-
-    if (
-        !target &&
-        config.logChannelId
-    ) {
-        target =
-            guild.channels.cache.get(
-                config.logChannelId
-            );
-    }
-
-    if (
-        target &&
-        target.isTextBased()
-    ) {
-        await target.send({
-            content:
-                `📄 Transcript for **${channel.name}**`,
-            files: [attachment]
-        });
-    }
-}
-
 // ============================================================
 // CREATE TICKET
 // ============================================================
@@ -5045,6 +5044,8 @@ client.on(
     }
 );
 
+
+
 // ============================================================
 // INTERACTION HANDLER
 // ============================================================
@@ -5095,93 +5096,256 @@ client.on(
                     });
                 }
 
-                // ------------------------------------------------
-                // TICKET CLAIM
-                // ------------------------------------------------
+               // ============================================================
+// TICKET CLAIM
+// ============================================================
 
-                if (
-                    id === "ticket:claim"
-                ) {
-                    const ticket =
-                        await getTicket(
-                            interaction.guild.id,
-                            interaction.channel.id
-                        );
+if (interaction.customId === "ticket:claim") {
 
-                    if (!ticket) {
-                        return interaction.reply({
-                            content:
-                                "❌ This is not a ticket.",
-                            flags:
-                                MessageFlags.Ephemeral
-                        });
-                    }
+    try {
 
-                    const config =
-                        await getTickets(
-                            interaction.guild.id
-                        );
+        if (!interaction.guild) {
+            return interaction.reply({
+                content: "❌ This can only be used inside a server.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
 
-                    if (
-                        !await ticketStaff(
-                            interaction,
-                            config
-                        )
-                    ) {
-                        return interaction.reply({
-                            content:
-                                "❌ You are not ticket staff.",
-                            flags:
-                                MessageFlags.Ephemeral
-                        });
-                    }
+        const config =
+            await TicketConfig.findOne({
+                guildId: interaction.guild.id
+            });
 
-                    if (
-                        ticket.claimedBy
-                    ) {
-                        return interaction.reply({
-                            content:
-                                `❌ This ticket is already claimed by <@${ticket.claimedBy}>.`,
-                            flags:
-                                MessageFlags.Ephemeral
-                        });
-                    }
+        if (!config) {
 
-                    ticket.claimedBy =
-                        interaction.user.id;
+            return interaction.reply({
+                content:
+                    "❌ Ticket system is not configured.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
 
-                    await ticket.save();
+        // Staff permission
+        const isStaff =
+            interaction.member.permissions.has(
+                PermissionFlagsBits.ManageChannels
+            ) ||
+            (
+                config.staffRoleId &&
+                interaction.member.roles.cache.has(
+                    config.staffRoleId
+                )
+            );
 
-                    await interaction.reply({
-                        content:
-                            `🙋 ${interaction.user} claimed this ticket.`
-                    });
+        if (!isStaff) {
 
-                    await sendLog(
-                        interaction.guild,
-                        "ticket",
-                        embed(0x5865f2)
-                            .setTitle(
-                                "🙋 Ticket Claimed"
-                            )
-                            .addFields(
-                                {
-                                    name: "Ticket",
-                                    value:
-                                        `${interaction.channel}`,
-                                    inline: true
-                                },
-                                {
-                                    name: "Staff",
-                                    value:
-                                        `${interaction.user}`,
-                                    inline: true
-                                }
-                            )
-                    );
+            return interaction.reply({
+                content:
+                    "❌ You don't have permission to claim tickets.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
 
-                    return;
+        const ticket =
+            await Ticket.findOne({
+                guildId:
+                    interaction.guild.id,
+                channelId:
+                    interaction.channel.id
+            });
+
+        if (!ticket) {
+
+            return interaction.reply({
+                content:
+                    "❌ This channel is not a ticket.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        if (ticket.status === "closed") {
+
+            return interaction.reply({
+                content:
+                    "❌ This ticket is already closed.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Already claimed
+        if (ticket.claimedBy) {
+
+            if (
+                ticket.claimedBy ===
+                interaction.user.id
+            ) {
+
+                return interaction.reply({
+                    content:
+                        "⚠️ You already claimed this ticket.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const previousClaimer =
+                await interaction.guild.members
+                    .fetch(ticket.claimedBy)
+                    .catch(() => null);
+
+            return interaction.reply({
+                content:
+                    `❌ This ticket is already claimed by ${
+                        previousClaimer
+                            ? previousClaimer.user.tag
+                            : `<@${ticket.claimedBy}>`
+                    }.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // ====================================================
+        // CLAIM
+        // ====================================================
+
+        ticket.claimedBy =
+            interaction.user.id;
+
+        ticket.status =
+            "claimed";
+
+        await ticket.save();
+
+        // ====================================================
+        // RENAME CHANNEL
+        // ====================================================
+
+        let newName =
+            `ticket-${interaction.user.username}`
+                .toLowerCase()
+                .replace(
+                    /[^a-z0-9-]/g,
+                    ""
+                )
+                .slice(
+                    0,
+                    80
+                );
+
+        if (!newName) {
+            newName =
+                `ticket-${interaction.user.id}`;
+        }
+
+        await interaction.channel.setName(
+            newName
+        );
+
+        // ====================================================
+        // UPDATE PERMISSIONS
+        // ====================================================
+
+        await interaction.channel.permissionOverwrites
+            .edit(
+                interaction.user.id,
+                {
+                    ViewChannel: true,
+                    SendMessages: true,
+                    ReadMessageHistory: true
                 }
+            )
+            .catch(() => {});
+
+        // ====================================================
+        // CLAIM MESSAGE
+        // ====================================================
+
+        const claimEmbed =
+            new EmbedBuilder()
+                .setColor(0x57f287)
+                .setTitle("🎫 Ticket Claimed")
+                .setDescription(
+                    `This ticket has been claimed by ${interaction.user}.`
+                )
+                .addFields(
+                    {
+                        name: "Staff Member",
+                        value:
+                            `${interaction.user}`,
+                        inline: true
+                    },
+                    {
+                        name: "Status",
+                        value:
+                            "🟢 Claimed",
+                        inline: true
+                    }
+                )
+                .setTimestamp();
+
+        await interaction.channel.send({
+            embeds: [
+                claimEmbed
+            ]
+        });
+
+        await interaction.reply({
+            content:
+                `✅ You claimed this ticket. The channel has been renamed to **${newName}**.`,
+            flags: MessageFlags.Ephemeral
+        });
+
+        // ====================================================
+        // LOG
+        // ====================================================
+
+        await sendLog(
+            interaction.guild,
+            "ticket",
+            new EmbedBuilder()
+                .setColor(0x57f287)
+                .setTitle("🎫 Ticket Claimed")
+                .addFields(
+                    {
+                        name: "Ticket",
+                        value:
+                            `${interaction.channel}`,
+                        inline: true
+                    },
+                    {
+                        name: "Claimed By",
+                        value:
+                            `${interaction.user}`,
+                        inline: true
+                    },
+                    {
+                        name: "Ticket Owner",
+                        value:
+                            `<@${ticket.userId}>`,
+                        inline: true
+                    }
+                )
+                .setTimestamp()
+        );
+
+    } catch (error) {
+
+        console.error(
+            "[27Pro] Ticket claim error:",
+            error
+        );
+
+        if (!interaction.replied) {
+
+            await interaction.reply({
+                content:
+                    "❌ Failed to claim the ticket.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+    }
+
+    return;
+}
 
                 // ------------------------------------------------
                 // TICKET CLOSE
@@ -6981,9 +7145,7 @@ client.on(
                 }
             }
 
-            // ====================================================
-            // END OF PART 3
-            // ====================================================
+   
         } catch (error) {
             console.error(
                 "interactionCreate error:",
@@ -7005,17 +7167,6 @@ client.on(
     }
 );
 
-// ============================================================
-// 27PRO - PART 4/4
-// CORRECTED FINAL PART
-// ============================================================
-
-// ============================================================
-// SECOND INTERACTION HANDLER
-// ============================================================
-// Part 3 already closed its interactionCreate handler.
-// This handler safely handles the remaining commands.
-// ============================================================
 
 client.on("interactionCreate", async interaction => {
 
