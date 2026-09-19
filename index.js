@@ -611,7 +611,117 @@ const KickConfig =
             timestamps: true
         })
     );
+// ============================================================
+// 27PRO RULES DATABASE MODEL
+// ============================================================
 
+const RulesConfigSchema = new mongoose.Schema({
+    guildId: {
+        type: String,
+        required: true,
+        unique: true,
+        index: true
+    },
+
+    enabled: {
+        type: Boolean,
+        default: false
+    },
+
+    title: {
+        type: String,
+        default: "📜 Server Rules"
+    },
+
+    description: {
+        type: String,
+        default:
+            "Please read and follow all server rules."
+    },
+
+    color: {
+        type: Number,
+        default: 0x5865f2
+    },
+
+    footer: {
+        type: String,
+        default: "27Pro • Server Rules"
+    },
+
+    channelId: {
+        type: String,
+        default: null
+    },
+
+    messageId: {
+        type: String,
+        default: null
+    },
+
+    rules: {
+        type: [
+            {
+                id: {
+                    type: String,
+                    required: true
+                },
+
+                title: {
+                    type: String,
+                    required: true
+                },
+
+                description: {
+                    type: String,
+                    required: true
+                },
+
+                emoji: {
+                    type: String,
+                    default: "📌"
+                },
+
+                createdAt: {
+                    type: Date,
+                    default: Date.now
+                },
+
+                updatedAt: {
+                    type: Date,
+                    default: Date.now
+                }
+            }
+        ],
+
+        default: []
+    },
+
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
+
+    updatedAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+RulesConfigSchema.pre(
+    "save",
+    function(next) {
+        this.updatedAt = new Date();
+        next();
+    }
+);
+
+const RulesConfig =
+    mongoose.models.RulesConfig ||
+    mongoose.model(
+        "RulesConfig",
+        RulesConfigSchema
+    );
 // ============================================================
 // HELPERS
 // ============================================================
@@ -10126,72 +10236,88 @@ client.on("interactionCreate", async interaction => {
             });
         }
 
-        // ====================================================
-        // CHOOSE
-        // ====================================================
+// ============================================================
+// CHOOSE
+// ============================================================
 
-        if (
-            command === "choose"
-        ) {
+if (
+    command === "choose"
+) {
 
-            const input =
-                interaction.options.getString(
-                    "options"
-                );
+    const input =
+        interaction.options.getString(
+            "options"
+        );
 
-            const choices =
-                input
-                    .split(",")
-                    .map(
-                        item =>
-                            item.trim()
-                    )
-                    .filter(
-                        Boolean
-                    );
+    if (!input) {
+        return interaction.reply({
+            content:
+                "❌ Please provide some options.",
+            flags:
+                MessageFlags.Ephemeral
+        });
+    }
 
-            if (
-                choices.length <
-                2
-            ) {
-                return interaction.reply({
-                    content:
-                        "❌ Enter at least two options separated by commas.",
-                    flags:
-                        MessageFlags.Ephemeral
-                });
-            }
+    const choices =
+        input
+            .split(",")
+            .map(item => item.trim())
+            .filter(Boolean);
 
-            const selected =
-                choices[
-                    Math.floor(
-                        Math.random() *
-                            choices.length
-                    )
-                ];
+    if (
+        choices.length < 2
+    ) {
+        return interaction.reply({
+            content:
+                "❌ Enter at least two options separated by commas.",
+            flags:
+                MessageFlags.Ephemeral
+        });
+    }
 
-            return interaction.reply({
-                embeds: [
-                    embed(0xff0055)
-                        .setTitle(
-                            "🤔 Choice"
-                        )
-                        .setDescription(
-                            `I choose **${selected}**`
-                        )
-                ]
-            });
-        }
+    const selected =
+        choices[
+            Math.floor(
+                Math.random() *
+                choices.length
+            )
+        ];
 
-  // ============================================================
-// /rules - COMPLETE RULES SYSTEM
+    return interaction.reply({
+        embeds: [
+            embed(0xff0055)
+                .setTitle("🤔 Choice")
+                .setDescription(
+                    `I choose **${selected}**`
+                )
+        ]
+    });
+}
+
+
+// ============================================================
+// 27PRO RULES SYSTEM
 // ============================================================
 
 if (
     interaction.isChatInputCommand() &&
     interaction.commandName === "rules"
 ) {
+
     try {
+
+        // ========================================================
+        // SERVER CHECK
+        // ========================================================
+
+        if (!interaction.guild) {
+            return interaction.reply({
+                content:
+                    "❌ This command can only be used inside a server.",
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
 
         // ========================================================
         // PERMISSION
@@ -10202,7 +10328,6 @@ if (
                 PermissionFlagsBits.ManageGuild
             )
         ) {
-
             return interaction.reply({
                 content:
                     "❌ You need **Manage Server** permission to manage the rules.",
@@ -10212,14 +10337,14 @@ if (
         }
 
         // ========================================================
-        // GET SUBCOMMAND
+        // SUBCOMMAND
         // ========================================================
 
         const subcommand =
             interaction.options.getSubcommand();
 
         // ========================================================
-        // GET / CREATE CONFIG
+        // LOAD CONFIG
         // ========================================================
 
         let config =
@@ -10227,6 +10352,10 @@ if (
                 guildId:
                     interaction.guild.id
             });
+
+        // ========================================================
+        // CREATE CONFIG
+        // ========================================================
 
         if (!config) {
 
@@ -10250,9 +10379,224 @@ if (
                     footer:
                         "27Pro • Server Rules",
 
+                    channelId:
+                        null,
+
+                    messageId:
+                        null,
+
                     rules:
                         []
                 });
+        }
+
+        // ========================================================
+        // SAFETY
+        // ========================================================
+
+        if (
+            !Array.isArray(
+                config.rules
+            )
+        ) {
+            config.rules = [];
+            await config.save();
+        }
+
+        // ========================================================
+        // BUILD RULES EMBED
+        // ========================================================
+
+        function buildRulesEmbed() {
+
+            return new EmbedBuilder()
+
+                .setColor(
+                    config.color ||
+                    0x5865f2
+                )
+
+                .setTitle(
+                    config.title ||
+                    "📜 Server Rules"
+                )
+
+                .setDescription(
+                    config.description ||
+                    "Please read and follow all server rules."
+                )
+
+                .setFooter({
+                    text:
+                        config.footer ||
+                        `${interaction.guild.name} • Server Rules`
+                })
+
+                .setTimestamp();
+        }
+
+        // ========================================================
+        // BUILD RULES DROPDOWN
+        // ========================================================
+
+        function buildRulesComponents() {
+
+            if (
+                !config.rules ||
+                !config.rules.length
+            ) {
+                return [];
+            }
+
+            const options =
+                config.rules
+                    .slice(0, 25)
+                    .map(
+                        (rule, index) => {
+
+                            const id =
+                                rule.id ||
+                                `RULE${index + 1}`;
+
+                            return {
+
+                                label:
+                                    `${rule.emoji || "📌"} ${rule.title || `Rule ${index + 1}`}`
+                                        .slice(
+                                            0,
+                                            100
+                                        ),
+
+                                description:
+                                    String(
+                                        rule.description ||
+                                        "View this rule."
+                                    )
+                                        .replace(
+                                            /\s+/g,
+                                            " "
+                                        )
+                                        .slice(
+                                            0,
+                                            100
+                                        ),
+
+                                value:
+                                    `rules:view:${id}`
+                            };
+                        }
+                    );
+
+            if (
+                !options.length
+            ) {
+                return [];
+            }
+
+            const menu =
+                new StringSelectMenuBuilder()
+
+                    .setCustomId(
+                        "rules:select"
+                    )
+
+                    .setPlaceholder(
+                        "📖 Select a rule to view"
+                    )
+
+                    .addOptions(
+                        options
+                    );
+
+            return [
+                new ActionRowBuilder()
+                    .addComponents(
+                        menu
+                    )
+            ];
+        }
+
+        // ========================================================
+        // UPDATE / CREATE PANEL
+        // ========================================================
+
+        async function updateRulesPanel() {
+
+            if (
+                !config.channelId
+            ) {
+                return null;
+            }
+
+            const channel =
+                interaction.guild.channels.cache.get(
+                    config.channelId
+                );
+
+            if (
+                !channel ||
+                !channel.isTextBased()
+            ) {
+                return null;
+            }
+
+            const payload = {
+                embeds: [
+                    buildRulesEmbed()
+                ],
+
+                components:
+                    buildRulesComponents()
+            };
+
+            let message = null;
+
+            // ----------------------------------------------------
+            // TRY EXISTING MESSAGE
+            // ----------------------------------------------------
+
+            if (
+                config.messageId
+            ) {
+
+                message =
+                    await channel.messages
+                        .fetch(
+                            config.messageId
+                        )
+                        .catch(
+                            () => null
+                        );
+            }
+
+            // ----------------------------------------------------
+            // EDIT EXISTING
+            // ----------------------------------------------------
+
+            if (message) {
+
+                await message.edit(
+                    payload
+                );
+
+                return message;
+            }
+
+            // ----------------------------------------------------
+            // CREATE NEW
+            // ----------------------------------------------------
+
+            message =
+                await channel.send(
+                    payload
+                );
+
+            config.messageId =
+                message.id;
+
+            await config.save();
+
+            return message;
         }
 
         // ========================================================
@@ -10265,17 +10609,19 @@ if (
 
             const channel =
                 interaction.options.getChannel(
-                    "channel"
+                    "channel",
+                    true
                 );
 
             if (
                 !channel ||
-                !channel.isTextBased()
+                channel.type !==
+                    ChannelType.GuildText
             ) {
 
                 return interaction.reply({
                     content:
-                        "❌ Please select a valid text channel.",
+                        "❌ Please select a normal text channel.",
                     flags:
                         MessageFlags.Ephemeral
                 });
@@ -10289,119 +10635,42 @@ if (
 
             await config.save();
 
-            // ----------------------------------------------------
-            // BUILD EMBED
-            // ----------------------------------------------------
+            let message;
 
-            const rulesEmbed =
-                new EmbedBuilder()
-                    .setColor(
-                        config.color ||
-                        0x5865f2
-                    )
-                    .setTitle(
-                        config.title ||
-                        "📜 Server Rules"
-                    )
-                    .setDescription(
-                        config.description ||
-                        "Please read and follow all server rules."
-                    )
-                    .setFooter({
-                        text:
-                            config.footer ||
-                            "27Pro • Server Rules"
-                    })
-                    .setTimestamp();
+            try {
 
-            // ----------------------------------------------------
-            // BUILD DROPDOWN
-            // ----------------------------------------------------
+                message =
+                    await updateRulesPanel();
 
-            let components = [];
+            } catch (error) {
 
-            if (
-                config.rules &&
-                config.rules.length
-            ) {
+                console.error(
+                    "[27Pro] Rules setup panel error:",
+                    error
+                );
 
-                const options =
-                    config.rules
-                        .slice(0, 25)
-                        .map(
-                            (rule, index) => {
-
-                                return {
-                                    label:
-                                        `${rule.emoji || "📌"} ${rule.title || `Rule ${index + 1}`}`
-                                            .slice(0, 100),
-
-                                    description:
-                                        String(
-                                            rule.description ||
-                                            "View this rule."
-                                        )
-                                            .replace(
-                                                /\n/g,
-                                                " "
-                                            )
-                                            .slice(
-                                                0,
-                                                100
-                                            ),
-
-                                    value:
-                                        `rules:view:${rule.id || index}`
-                                };
-                            }
-                        );
-
-                if (
-                    options.length
-                ) {
-
-                    const menu =
-                        new StringSelectMenuBuilder()
-                            .setCustomId(
-                                "rules:select"
-                            )
-                            .setPlaceholder(
-                                "📖 Select a rule to view"
-                            )
-                            .addOptions(
-                                options
-                            );
-
-                    components.push(
-                        new ActionRowBuilder()
-                            .addComponents(
-                                menu
-                            )
-                    );
-                }
+                return interaction.reply({
+                    content:
+                        "❌ I couldn't send the rules panel. Check my permissions in that channel.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
             }
 
-            // ----------------------------------------------------
-            // SEND PANEL
-            // ----------------------------------------------------
+            if (!message) {
 
-            const message =
-                await channel.send({
-                    embeds: [
-                        rulesEmbed
-                    ],
-
-                    components
+                return interaction.reply({
+                    content:
+                        "❌ I couldn't create the rules panel.",
+                    flags:
+                        MessageFlags.Ephemeral
                 });
-
-            config.messageId =
-                message.id;
-
-            await config.save();
+            }
 
             return interaction.reply({
                 content:
-                    `✅ Rules system has been set up in ${channel}.\n\n` +
+                    `✅ Rules system setup complete!\n\n` +
+                    `📍 Channel: ${channel}\n` +
                     `📜 Rules: **${config.rules.length}**\n` +
                     `🔽 Dropdown: **${config.rules.length ? "Enabled" : "Waiting for rules"}**`,
                 flags:
@@ -10410,36 +10679,12 @@ if (
         }
 
         // ========================================================
-        // ADD RULE
+        // ADD
         // ========================================================
 
         if (
             subcommand === "add"
         ) {
-
-            const title =
-                interaction.options.getString(
-                    "title",
-                    true
-                );
-
-            const description =
-                interaction.options.getString(
-                    "description",
-                    true
-                );
-
-            const emoji =
-                interaction.options.getString(
-                    "emoji"
-                ) ||
-                "📌";
-
-            if (
-                !config.rules
-            ) {
-                config.rules = [];
-            }
 
             if (
                 config.rules.length >= 25
@@ -10447,17 +10692,51 @@ if (
 
                 return interaction.reply({
                     content:
-                        "❌ Discord dropdowns support a maximum of 25 rules.",
+                        "❌ You can have a maximum of **25 rules**.",
                     flags:
                         MessageFlags.Ephemeral
                 });
             }
 
-            const ruleId =
-                Math.random()
-                    .toString(36)
-                    .substring(2, 8)
-                    .toUpperCase();
+            const title =
+                interaction.options.getString(
+                    "title",
+                    true
+                ).trim();
+
+            const description =
+                interaction.options.getString(
+                    "description",
+                    true
+                ).trim();
+
+            const emoji =
+                (
+                    interaction.options.getString(
+                        "emoji"
+                    ) || "📌"
+                ).trim();
+
+            let ruleId;
+
+            do {
+
+                ruleId =
+                    Math.random()
+                        .toString(36)
+                        .substring(
+                            2,
+                            8
+                        )
+                        .toUpperCase();
+
+            } while (
+                config.rules.some(
+                    rule =>
+                        rule.id ===
+                        ruleId
+                )
+            );
 
             const rule = {
 
@@ -10495,130 +10774,33 @@ if (
 
             await config.save();
 
-            // ----------------------------------------------------
-            // UPDATE EXISTING PANEL
-            // ----------------------------------------------------
-
+            // Update published panel
             if (
-                config.channelId &&
-                config.messageId
+                config.channelId
             ) {
-
-                const channel =
-                    interaction.guild.channels.cache.get(
-                        config.channelId
-                    );
-
-                if (
-                    channel &&
-                    channel.isTextBased()
-                ) {
-
-                    const message =
-                        await channel.messages
-                            .fetch(
-                                config.messageId
+                await updateRulesPanel()
+                    .catch(
+                        error =>
+                            console.warn(
+                                "[27Pro] Could not update rules panel:",
+                                error.message
                             )
-                            .catch(
-                                () => null
-                            );
-
-                    if (message) {
-
-                        const rulesEmbed =
-                            new EmbedBuilder()
-                                .setColor(
-                                    config.color ||
-                                    0x5865f2
-                                )
-                                .setTitle(
-                                    config.title ||
-                                    "📜 Server Rules"
-                                )
-                                .setDescription(
-                                    config.description ||
-                                    "Please read and follow all server rules."
-                                )
-                                .setFooter({
-                                    text:
-                                        config.footer ||
-                                        "27Pro • Server Rules"
-                                })
-                                .setTimestamp();
-
-                        const options =
-                            config.rules
-                                .slice(0, 25)
-                                .map(
-                                    (item, index) => {
-
-                                        return {
-                                            label:
-                                                `${item.emoji || "📌"} ${item.title || `Rule ${index + 1}`}`
-                                                    .slice(
-                                                        0,
-                                                        100
-                                                    ),
-
-                                            description:
-                                                String(
-                                                    item.description ||
-                                                    "View this rule."
-                                                )
-                                                    .replace(
-                                                        /\n/g,
-                                                        " "
-                                                    )
-                                                    .slice(
-                                                        0,
-                                                        100
-                                                    ),
-
-                                            value:
-                                                `rules:view:${item.id || index}`
-                                        };
-                                    }
-                                );
-
-                        const menu =
-                            new StringSelectMenuBuilder()
-                                .setCustomId(
-                                    "rules:select"
-                                )
-                                .setPlaceholder(
-                                    "📖 Select a rule to view"
-                                )
-                                .addOptions(
-                                    options
-                                );
-
-                        await message.edit({
-                            embeds: [
-                                rulesEmbed
-                            ],
-                            components: [
-                                new ActionRowBuilder()
-                                    .addComponents(
-                                        menu
-                                    )
-                            ]
-                        });
-                    }
-                }
+                    );
             }
 
             return interaction.reply({
                 content:
-                    `✅ Rule added!\n\n` +
-                    `**${rule.emoji} ${rule.title}**\n` +
-                    `ID: \`${rule.id}\``,
+                    `✅ **Rule added!**\n\n` +
+                    `${rule.emoji} **${rule.title}**\n` +
+                    `${rule.description}\n\n` +
+                    `🆔 ID: \`${rule.id}\``,
                 flags:
                     MessageFlags.Ephemeral
             });
         }
 
         // ========================================================
-        // LIST RULES
+        // LIST
         // ========================================================
 
         if (
@@ -10626,43 +10808,50 @@ if (
         ) {
 
             if (
-                !config.rules ||
                 !config.rules.length
             ) {
 
                 return interaction.reply({
                     content:
-                        "📭 No rules have been added yet.\n\nUse `/rules add` to create one.",
+                        "📭 There are no rules yet.\n\nUse `/rules add` to create one.",
                     flags:
                         MessageFlags.Ephemeral
                 });
             }
 
-            const rulesText =
-                config.rules
-                    .map(
-                        (rule, index) =>
+            const lines =
+                config.rules.map(
+                    (rule, index) => {
+
+                        return (
                             `${rule.emoji || "📌"} **${index + 1}. ${rule.title}**\n` +
                             `${rule.description}\n` +
-                            `ID: \`${rule.id}\``
-                    )
-                    .join("\n\n");
+                            `🆔 \`${rule.id}\``
+                        );
+                    }
+                );
 
             const listEmbed =
                 new EmbedBuilder()
+
                     .setColor(
                         config.color ||
                         0x5865f2
                     )
+
                     .setTitle(
-                        "📜 Configured Rules"
+                        "📜 Server Rules"
                     )
+
                     .setDescription(
-                        rulesText.slice(
-                            0,
-                            4096
-                        )
+                        lines
+                            .join("\n\n")
+                            .slice(
+                                0,
+                                4096
+                            )
                     )
+
                     .setFooter({
                         text:
                             `${config.rules.length} rule(s)`
@@ -10678,7 +10867,7 @@ if (
         }
 
         // ========================================================
-        // REMOVE RULE
+        // REMOVE
         // ========================================================
 
         if (
@@ -10686,10 +10875,12 @@ if (
         ) {
 
             const id =
-                interaction.options.getString(
-                    "id",
-                    true
-                )
+                interaction.options
+                    .getString(
+                        "id",
+                        true
+                    )
+                    .trim()
                     .toUpperCase();
 
             const index =
@@ -10697,7 +10888,8 @@ if (
                     rule =>
                         String(
                             rule.id
-                        ).toUpperCase() === id
+                        ).toUpperCase() ===
+                        id
                 );
 
             if (
@@ -10722,16 +10914,30 @@ if (
 
             await config.save();
 
+            if (
+                config.channelId
+            ) {
+
+                await updateRulesPanel()
+                    .catch(
+                        error =>
+                            console.warn(
+                                "[27Pro] Could not update rules panel:",
+                                error.message
+                            )
+                    );
+            }
+
             return interaction.reply({
                 content:
-                    `🗑️ Removed rule **${removed.title}**.`,
+                    `🗑️ Removed **${removed.emoji || "📌"} ${removed.title}**.`,
                 flags:
                     MessageFlags.Ephemeral
             });
         }
 
         // ========================================================
-        // EDIT RULE
+        // EDIT
         // ========================================================
 
         if (
@@ -10739,10 +10945,12 @@ if (
         ) {
 
             const id =
-                interaction.options.getString(
-                    "id",
-                    true
-                )
+                interaction.options
+                    .getString(
+                        "id",
+                        true
+                    )
+                    .trim()
                     .toUpperCase();
 
             const rule =
@@ -10750,7 +10958,8 @@ if (
                     item =>
                         String(
                             item.id
-                        ).toUpperCase() === id
+                        ).toUpperCase() ===
+                        id
                 );
 
             if (!rule) {
@@ -10778,34 +10987,68 @@ if (
                     "emoji"
                 );
 
-            if (title) {
+            if (
+                title === null &&
+                description === null &&
+                emoji === null
+            ) {
+
+                return interaction.reply({
+                    content:
+                        "❌ Provide a new title, description, or emoji.",
+                    flags:
+                        MessageFlags.Ephemeral
+                });
+            }
+
+            if (
+                title !== null
+            ) {
                 rule.title =
-                    title.slice(
+                    title.trim().slice(
                         0,
                         100
                     );
             }
 
-            if (description) {
+            if (
+                description !== null
+            ) {
                 rule.description =
-                    description.slice(
+                    description.trim().slice(
                         0,
                         1000
                     );
             }
 
-            if (emoji) {
+            if (
+                emoji !== null
+            ) {
                 rule.emoji =
-                    emoji.slice(
+                    emoji.trim().slice(
                         0,
                         10
-                    );
+                    ) || "📌";
             }
 
             rule.updatedAt =
                 new Date();
 
             await config.save();
+
+            if (
+                config.channelId
+            ) {
+
+                await updateRulesPanel()
+                    .catch(
+                        error =>
+                            console.warn(
+                                "[27Pro] Could not update rules panel:",
+                                error.message
+                            )
+                    );
+            }
 
             return interaction.reply({
                 content:
@@ -10829,156 +11072,52 @@ if (
 
                 return interaction.reply({
                     content:
-                        "❌ Run `/rules setup channel:#rules` first.",
+                        "❌ No rules channel is configured.\n\nUse `/rules setup` first.",
                     flags:
                         MessageFlags.Ephemeral
                 });
             }
 
-            const channel =
-                interaction.guild.channels.cache.get(
-                    config.channelId
-                );
+            let message;
 
-            if (
-                !channel ||
-                !channel.isTextBased()
-            ) {
+            try {
+
+                message =
+                    await updateRulesPanel();
+
+            } catch (error) {
+
+                console.error(
+                    "[27Pro] Rules publish error:",
+                    error
+                );
 
                 return interaction.reply({
                     content:
-                        "❌ The configured rules channel no longer exists.",
+                        "❌ Failed to publish the rules panel. Check the bot's permissions.",
                     flags:
                         MessageFlags.Ephemeral
                 });
             }
 
-            const rulesEmbed =
-                new EmbedBuilder()
-                    .setColor(
-                        config.color ||
-                        0x5865f2
-                    )
-                    .setTitle(
-                        config.title ||
-                        "📜 Server Rules"
-                    )
-                    .setDescription(
-                        config.description ||
-                        "Please read and follow all server rules."
-                    )
-                    .setFooter({
-                        text:
-                            config.footer ||
-                            "27Pro • Server Rules"
-                    })
-                    .setTimestamp();
+            if (!message) {
 
-            let components = [];
-
-            if (
-                config.rules &&
-                config.rules.length
-            ) {
-
-                const options =
-                    config.rules
-                        .slice(0, 25)
-                        .map(
-                            (rule, index) => {
-
-                                return {
-                                    label:
-                                        `${rule.emoji || "📌"} ${rule.title || `Rule ${index + 1}`}`
-                                            .slice(
-                                                0,
-                                                100
-                                            ),
-
-                                    description:
-                                        String(
-                                            rule.description ||
-                                            "View this rule."
-                                        )
-                                            .replace(
-                                                /\n/g,
-                                                " "
-                                            )
-                                            .slice(
-                                                0,
-                                                100
-                                            ),
-
-                                    value:
-                                        `rules:view:${rule.id || index}`
-                                };
-                            }
-                        );
-
-                const menu =
-                    new StringSelectMenuBuilder()
-                        .setCustomId(
-                            "rules:select"
-                        )
-                        .setPlaceholder(
-                            "📖 Select a rule to view"
-                        )
-                        .addOptions(
-                            options
-                        );
-
-                components.push(
-                    new ActionRowBuilder()
-                        .addComponents(
-                            menu
-                        )
-                );
-            }
-
-            let message = null;
-
-            if (
-                config.messageId
-            ) {
-
-                message =
-                    await channel.messages
-                        .fetch(
-                            config.messageId
-                        )
-                        .catch(
-                            () => null
-                        );
-            }
-
-            if (message) {
-
-                await message.edit({
-                    embeds: [
-                        rulesEmbed
-                    ],
-                    components
+                return interaction.reply({
+                    content:
+                        "❌ The configured rules channel could not be found.",
+                    flags:
+                        MessageFlags.Ephemeral
                 });
-
-            } else {
-
-                message =
-                    await channel.send({
-                        embeds: [
-                            rulesEmbed
-                        ],
-                        components
-                    });
-
-                config.messageId =
-                    message.id;
             }
+
+            config.enabled =
+                true;
 
             await config.save();
 
             return interaction.reply({
                 content:
-                    "✅ Rules panel published successfully.",
+                    `✅ Rules panel published in <#${config.channelId}>.`,
                 flags:
                     MessageFlags.Ephemeral
             });
@@ -10993,9 +11132,15 @@ if (
         ) {
 
             config.rules = [];
-            config.channelId = null;
-            config.messageId = null;
-            config.enabled = false;
+
+            config.channelId =
+                null;
+
+            config.messageId =
+                null;
+
+            config.enabled =
+                false;
 
             await config.save();
 
@@ -11008,7 +11153,7 @@ if (
         }
 
         // ========================================================
-        // UNKNOWN SUBCOMMAND
+        // UNKNOWN
         // ========================================================
 
         return interaction.reply({
@@ -11021,7 +11166,7 @@ if (
     } catch (error) {
 
         console.error(
-            "[27Pro] /rules error:",
+            "[27Pro] RULES ERROR:",
             error
         );
 
@@ -11032,7 +11177,155 @@ if (
 
             return interaction.reply({
                 content:
-                    "❌ Failed to process the rules command.",
+                    `❌ Failed to process the rules command.\n\n` +
+                    `\`${String(
+                        error?.message ||
+                        error
+                    ).slice(
+                        0,
+                        1200
+                    )}\``,
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+    }
+
+    return;
+}
+
+
+// ============================================================
+// RULES DROPDOWN
+// ============================================================
+
+if (
+    interaction.isStringSelectMenu() &&
+    interaction.customId === "rules:select"
+) {
+
+    try {
+
+        const selected =
+            interaction.values?.[0];
+
+        if (
+            !selected ||
+            !selected.startsWith(
+                "rules:view:"
+            )
+        ) {
+
+            return interaction.reply({
+                content:
+                    "❌ Invalid rule selection.",
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+
+        const ruleId =
+            selected.replace(
+                "rules:view:",
+                ""
+            );
+
+        const config =
+            await RulesConfig.findOne({
+                guildId:
+                    interaction.guild.id
+            });
+
+        if (!config) {
+
+            return interaction.reply({
+                content:
+                    "❌ Rules system is not configured.",
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+
+        if (
+            !Array.isArray(
+                config.rules
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "❌ The rules configuration is invalid.",
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+
+        const rule =
+            config.rules.find(
+                item =>
+                    String(
+                        item.id
+                    ).toUpperCase() ===
+                    String(
+                        ruleId
+                    ).toUpperCase()
+            );
+
+        if (!rule) {
+
+            return interaction.reply({
+                content:
+                    "❌ That rule no longer exists.",
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+
+        const ruleEmbed =
+            new EmbedBuilder()
+
+                .setColor(
+                    config.color ||
+                    0x5865f2
+                )
+
+                .setTitle(
+                    `${rule.emoji || "📌"} ${rule.title}`
+                )
+
+                .setDescription(
+                    rule.description
+                )
+
+                .setFooter({
+                    text:
+                        `${config.footer || "27Pro • Server Rules"} • Rule ${rule.id}`
+                })
+
+                .setTimestamp();
+
+        return interaction.reply({
+            embeds: [
+                ruleEmbed
+            ],
+            flags:
+                MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+
+        console.error(
+            "[27Pro] RULES DROPDOWN ERROR:",
+            error
+        );
+
+        if (
+            !interaction.replied &&
+            !interaction.deferred
+        ) {
+
+            return interaction.reply({
+                content:
+                    "❌ Failed to display the selected rule.",
                 flags:
                     MessageFlags.Ephemeral
             });
