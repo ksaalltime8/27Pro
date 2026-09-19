@@ -11196,7 +11196,7 @@ if (
 
 
 // ============================================================
-// RULES DROPDOWN
+// 27PRO RULES DROPDOWN
 // ============================================================
 
 if (
@@ -11204,7 +11204,31 @@ if (
     interaction.customId === "rules:select"
 ) {
 
+    // --------------------------------------------------------
+    // ACKNOWLEDGE THE INTERACTION IMMEDIATELY
+    // --------------------------------------------------------
+
     try {
+
+        await interaction.deferReply({
+            flags: MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+
+        console.error(
+            "[27Pro] RULES DROPDOWN ACK ERROR:",
+            error
+        );
+
+        return;
+    }
+
+    try {
+
+        // ----------------------------------------------------
+        // GET SELECTED RULE
+        // ----------------------------------------------------
 
         const selected =
             interaction.values?.[0];
@@ -11216,19 +11240,41 @@ if (
             )
         ) {
 
-            return interaction.reply({
+            return interaction.editReply({
                 content:
-                    "❌ Invalid rule selection.",
-                flags:
-                    MessageFlags.Ephemeral
+                    "❌ Invalid rule selection."
             });
         }
 
+        // ----------------------------------------------------
+        // GET RULE ID
+        // ----------------------------------------------------
+
         const ruleId =
-            selected.replace(
-                "rules:view:",
-                ""
-            );
+            selected
+                .replace(
+                    "rules:view:",
+                    ""
+                )
+                .trim();
+
+        // ----------------------------------------------------
+        // SERVER CHECK
+        // ----------------------------------------------------
+
+        if (
+            !interaction.guild
+        ) {
+
+            return interaction.editReply({
+                content:
+                    "❌ This can only be used inside a server."
+            });
+        }
+
+        // ----------------------------------------------------
+        // LOAD RULES
+        // ----------------------------------------------------
 
         const config =
             await RulesConfig.findOne({
@@ -11236,28 +11282,35 @@ if (
                     interaction.guild.id
             });
 
-        if (!config) {
+        if (
+            !config
+        ) {
 
-            return interaction.reply({
+            return interaction.editReply({
                 content:
-                    "❌ Rules system is not configured.",
-                flags:
-                    MessageFlags.Ephemeral
+                    "❌ The rules system is not configured."
             });
         }
+
+        // ----------------------------------------------------
+        // SAFETY
+        // ----------------------------------------------------
 
         if (
             !Array.isArray(
                 config.rules
             )
         ) {
-            return interaction.reply({
+
+            return interaction.editReply({
                 content:
-                    "❌ The rules configuration is invalid.",
-                flags:
-                    MessageFlags.Ephemeral
+                    "❌ The server rules configuration is invalid."
             });
         }
+
+        // ----------------------------------------------------
+        // FIND RULE
+        // ----------------------------------------------------
 
         const rule =
             config.rules.find(
@@ -11270,15 +11323,19 @@ if (
                     ).toUpperCase()
             );
 
-        if (!rule) {
+        if (
+            !rule
+        ) {
 
-            return interaction.reply({
+            return interaction.editReply({
                 content:
-                    "❌ That rule no longer exists.",
-                flags:
-                    MessageFlags.Ephemeral
+                    "❌ That rule no longer exists."
             });
         }
+
+        // ----------------------------------------------------
+        // BUILD EMBED
+        // ----------------------------------------------------
 
         const ruleEmbed =
             new EmbedBuilder()
@@ -11289,11 +11346,12 @@ if (
                 )
 
                 .setTitle(
-                    `${rule.emoji || "📌"} ${rule.title}`
+                    `${rule.emoji || "📌"} ${rule.title || "Server Rule"}`
                 )
 
                 .setDescription(
-                    rule.description
+                    rule.description ||
+                    "No description provided."
                 )
 
                 .setFooter({
@@ -11303,12 +11361,14 @@ if (
 
                 .setTimestamp();
 
-        return interaction.reply({
+        // ----------------------------------------------------
+        // SEND RESULT
+        // ----------------------------------------------------
+
+        return interaction.editReply({
             embeds: [
                 ruleEmbed
-            ],
-            flags:
-                MessageFlags.Ephemeral
+            ]
         });
 
     } catch (error) {
@@ -11318,21 +11378,24 @@ if (
             error
         );
 
-        if (
-            !interaction.replied &&
-            !interaction.deferred
-        ) {
+        try {
 
-            return interaction.reply({
+            return interaction.editReply({
                 content:
-                    "❌ Failed to display the selected rule.",
-                flags:
-                    MessageFlags.Ephemeral
+                    `❌ Failed to display the rule.\n\n` +
+                    `\`${String(
+                        error?.message ||
+                        error
+                    ).slice(
+                        0,
+                        1000
+                    )}\``,
+                embeds: []
             });
-        }
-    }
 
-    return;
+        } catch {}
+
+    }
 }
         // ====================================================
         // KICK LIVE
