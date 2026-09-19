@@ -11924,24 +11924,65 @@ client.on(
 // GRACEFUL SHUTDOWN
 // ============================================================
 
-async function shutdown27Pro(
-    signal
-) {
-
-    if (
-        shuttingDown
-    ) {
+async function shutdown27Pro(signal) {
+    if (shuttingDown) {
         return;
     }
 
-    shuttingDown =
-        true;
+    shuttingDown = true;
 
     console.log(
         `[27Pro] ${signal} received. Shutting down...`
     );
 
     try {
+        // Stop KICK checker
+        if (checkerInterval) {
+            clearInterval(checkerInterval);
+            checkerInterval = null;
+        }
+
+        if (kickChecker) {
+            clearInterval(kickChecker);
+            kickChecker = null;
+        }
+
+        checkerRunning = false;
+
+        // Close health server
+        if (server) {
+            await new Promise(resolve => {
+                server.close(() => {
+                    resolve();
+                });
+            }).catch(() => {});
+        }
+
+        // Disconnect MongoDB
+        if (
+            mongoose.connection.readyState !== 0
+        ) {
+            await mongoose.connection
+                .close()
+                .catch(() => {});
+        }
+
+        // Destroy Discord client
+        if (client) {
+            client.destroy();
+        }
+
+        console.log(
+            "[27Pro] Shutdown complete."
+        );
+
+    } catch (error) {
+        console.error(
+            "[27Pro] Shutdown error:",
+            error
+        );
+    }
+}
 
         // ----------------------------------------------------
         // KICK TIMER
