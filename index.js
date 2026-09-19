@@ -2965,50 +2965,93 @@ async function closeTicket(
     ticket,
     userId
 ) {
+
     const channel =
         guild.channels.cache.get(
             ticket.channelId
         );
 
     if (!channel) {
-        ticket.status = "closed";
-        ticket.closedBy = userId;
-        ticket.closedAt = new Date();
+
+        ticket.status =
+            "closed";
+
+        ticket.closedBy =
+            userId;
+
+        ticket.closedAt =
+            new Date();
+
         await ticket.save();
+
         return;
     }
+
+    // ========================================================
+    // SAVE CLOSED-BY BEFORE TRANSCRIPT
+    // ========================================================
+
+    ticket.closedBy =
+        userId;
+
+    // ========================================================
+    // SEND TRANSCRIPT
+    // ========================================================
 
     await sendTicketTranscript(
         guild,
         ticket,
         channel
-    ).catch(() => {});
+    );
+
+    // ========================================================
+    // TICKET CONFIG
+    // ========================================================
 
     const config =
         await getTickets(
             guild.id
         );
 
-    if (
-        ticket.userId
-    ) {
-        await channel.permissionOverwrites.edit(
-            ticket.userId,
-            {
-                SendMessages: false
-            }
-        ).catch(() => {});
+    // ========================================================
+    // LOCK TICKET
+    // ========================================================
+
+    if (ticket.userId) {
+
+        await channel.permissionOverwrites
+            .edit(
+                ticket.userId,
+                {
+                    SendMessages: false
+                }
+            )
+            .catch(() => {});
     }
 
-    ticket.status = "closed";
-    ticket.closedBy = userId;
-    ticket.closedAt = new Date();
+    // ========================================================
+    // UPDATE DATABASE
+    // ========================================================
+
+    ticket.status =
+        "closed";
+
+    ticket.closedAt =
+        new Date();
 
     await ticket.save();
+
+    // ========================================================
+    // RENAME CLOSED TICKET
+    // ========================================================
 
     await channel.setName(
         `closed-${String(ticket.number).padStart(4, "0")}`
     ).catch(() => {});
+
+    // ========================================================
+    // SEND CLOSE LOG
+    // ========================================================
 
     await sendLog(
         guild,
@@ -3019,23 +3062,45 @@ async function closeTicket(
             )
             .addFields(
                 {
-                    name: "Ticket",
+                    name:
+                        "Ticket",
                     value:
                         `<#${channel.id}>`,
-                    inline: true
+                    inline:
+                        true
                 },
                 {
-                    name: "Closed By",
+                    name:
+                        "Ticket Owner",
+                    value:
+                        `<@${ticket.userId}>`,
+                    inline:
+                        true
+                },
+                {
+                    name:
+                        "Closed By",
                     value:
                         `<@${userId}>`,
-                    inline: true
+                    inline:
+                        true
+                },
+                {
+                    name:
+                        "Claimed By",
+                    value:
+                        ticket.claimedBy
+                            ? `<@${ticket.claimedBy}>`
+                            : "Nobody",
+                    inline:
+                        true
                 }
             )
+            .setTimestamp()
     );
 
     return config;
 }
-
 // ============================================================
 // REOPEN TICKET
 // ============================================================
