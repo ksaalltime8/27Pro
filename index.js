@@ -2648,107 +2648,287 @@ async function ticketStaff(
 // TICKET TRANSCRIPT
 // ============================================================
 
-async function createTicketTranscript(channel) {
+async function sendTicketTranscript(
+    guild,
+    ticket,
+    channel
+) {
+    try {
+        const messages = [];
+        let lastId = null;
 
-    const messages = [];
+        // Fetch entire ticket history
+        while (true) {
 
-    let lastId = null;
+            const options = {
+                limit: 100
+            };
 
-    while (true) {
+            if (lastId) {
+                options.before = lastId;
+            }
 
-        const options = {
-            limit: 100
-        };
+            const batch =
+                await channel.messages.fetch(options);
 
-        if (lastId) {
-            options.before = lastId;
+            if (!batch.size) {
+                break;
+            }
+
+            messages.push(
+                ...batch.values()
+            );
+
+            lastId =
+                batch.last().id;
+
+            if (batch.size < 100) {
+                break;
+            }
         }
 
-        const batch =
-            await channel.messages.fetch(options);
+        // Oldest → newest
+        messages.reverse();
 
-        if (!batch.size) {
-            break;
+        // ====================================================
+        // BUILD TRANSCRIPT
+        // ====================================================
+
+        let transcript =
+            "============================================================\n";
+
+        transcript +=
+            "27Pro • TICKET TRANSCRIPT\n";
+
+        transcript +=
+            "============================================================\n\n";
+
+        transcript +=
+            `Server: ${guild.name}\n`;
+
+        transcript +=
+            `Server ID: ${guild.id}\n`;
+
+        transcript +=
+            `Ticket: #${ticket.number}\n`;
+
+        transcript +=
+            `Channel: #${channel.name}\n`;
+
+        transcript +=
+            `Ticket Owner ID: ${ticket.userId}\n`;
+
+        transcript +=
+            `Created: ${
+                ticket.createdAt
+                    ? ticket.createdAt.toISOString()
+                    : "Unknown"
+            }\n`;
+
+        transcript +=
+            `Closed: ${new Date().toISOString()}\n`;
+
+        transcript +=
+            `Messages: ${messages.length}\n\n`;
+
+        transcript +=
+            "============================================================\n\n";
+
+        // ====================================================
+        // MESSAGES
+        // ====================================================
+
+        for (const message of messages) {
+
+            const timestamp =
+                message.createdAt
+                    ? message.createdAt.toISOString()
+                    : "Unknown";
+
+            const author =
+                message.author
+                    ? `${message.author.tag} (${message.author.id})`
+                    : "Unknown User";
+
+            transcript +=
+                `[${timestamp}] ${author}\n`;
+
+            if (message.content) {
+
+                transcript +=
+                    `${message.content}\n`;
+            }
+
+            // Attachments
+            if (
+                message.attachments &&
+                message.attachments.size
+            ) {
+
+                for (
+                    const attachment
+                    of message.attachments.values()
+                ) {
+
+                    transcript +=
+                        `[Attachment] ${attachment.url}\n`;
+                }
+            }
+
+            // Embeds
+            if (
+                message.embeds &&
+                message.embeds.length
+            ) {
+
+                transcript +=
+                    `[Embeds: ${message.embeds.length}]\n`;
+            }
+
+            transcript += "\n";
         }
 
-        messages.push(
-            ...batch.values()
+        transcript +=
+            "============================================================\n";
+
+        transcript +=
+            "End of transcript\n";
+
+        transcript +=
+            "============================================================\n";
+
+        const buffer =
+            Buffer.from(
+                transcript,
+                "utf8"
+            );
+
+        // ====================================================
+        // SEND TO ORIGINAL TICKET OWNER
+        // ====================================================
+
+        const owner =
+            await client.users
+                .fetch(ticket.userId)
+                .catch(() => null);
+
+        if (owner) {
+
+            try {
+
+                const ownerFile =
+                    new AttachmentBuilder(
+                        buffer,
+                        {
+                            name:
+                                `ticket-${ticket.number}-transcript.txt`
+                        }
+                    );
+
+                await owner.send({
+                    content:
+                        `📄 Your ticket **#${ticket.number}** has been closed.\n\n` +
+                        `Here is your ticket transcript from **${guild.name}**.`,
+
+                    files: [
+                        ownerFile
+                    ]
+                });
+
+                console.log(
+                    `[27Pro] Transcript sent to ticket owner ${owner.tag}`
+                );
+
+            } catch (error) {
+
+                console.warn(
+                    `[27Pro] Could not DM transcript to ticket owner ${ticket.userId}:`,
+                    error.message
+                );
+            }
+        }
+
+        // ====================================================
+        // SEND TO TRANSCRIPT CHANNEL
+        // ====================================================
+
+        const config =
+            await getTickets(
+                guild.id
+            );
+
+        let transcriptChannel = null;
+
+        if (
+            config &&
+            config.transcriptChannelId
+        ) {
+
+            transcriptChannel =
+                guild.channels.cache.get(
+                    config.transcriptChannelId
+                );
+        }
+
+        // Fallback to log channel
+        if (
+            !transcriptChannel &&
+            config &&
+            config.logChannelId
+        ) {
+
+            transcriptChannel =
+                guild.channels.cache.get(
+                    config.logChannelId
+                );
+        }
+
+        if (
+            transcriptChannel &&
+            transcriptChannel.isTextBased()
+        ) {
+
+            const logFile =
+                new AttachmentBuilder(
+                    buffer,
+                    {
+                        name:
+                            `ticket-${ticket.number}-transcript.txt`
+                    }
+                );
+
+            await transcriptChannel.send({
+
+                content:
+                    `📄 **Ticket Transcript**\n\n` +
+                    `**Ticket:** #${ticket.number}\n` +
+                    `**Owner:** <@${ticket.userId}>\n` +
+                    `**Closed By:** <@${ticket.closedBy || "Unknown"}>`,
+
+                files: [
+                    logFile
+                ]
+
+            }).catch(error => {
+
+                console.warn(
+                    "[27Pro] Could not send transcript to log channel:",
+                    error.message
+                );
+            });
+        }
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "[27Pro] Ticket transcript error:",
+            error
         );
 
-        lastId =
-            batch.last().id;
-
-        if (batch.size < 100) {
-            break;
-        }
+        return false;
     }
-
-    messages.reverse();
-
-    let transcript = "";
-
-    transcript +=
-        `27Pro Ticket Transcript\n`;
-
-    transcript +=
-        `========================================\n`;
-
-    transcript +=
-        `Server: ${channel.guild.name}\n`;
-
-    transcript +=
-        `Channel: #${channel.name}\n`;
-
-    transcript +=
-        `Created: ${new Date().toISOString()}\n`;
-
-    transcript +=
-        `Messages: ${messages.length}\n`;
-
-    transcript +=
-        `========================================\n\n`;
-
-    for (const message of messages) {
-
-        const timestamp =
-            message.createdAt
-                .toISOString();
-
-        const author =
-            message.author
-                ? `${message.author.tag} (${message.author.id})`
-                : "Unknown User";
-
-        let content =
-            message.content || "";
-
-        if (message.attachments.size) {
-
-            const attachments =
-                message.attachments
-                    .map(
-                        attachment =>
-                            `[Attachment: ${attachment.url}]`
-                    )
-                    .join("\n");
-
-            content +=
-                content
-                    ? `\n${attachments}`
-                    : attachments;
-        }
-
-        transcript +=
-            `[${timestamp}] ${author}\n`;
-
-        transcript +=
-            `${content}\n\n`;
-    }
-
-    return Buffer.from(
-        transcript,
-        "utf8"
-    );
 }
 // ============================================================
 // CREATE TICKET
@@ -2971,6 +3151,10 @@ async function closeTicket(
             ticket.channelId
         );
 
+    // ========================================================
+    // CHANNEL NO LONGER EXISTS
+    // ========================================================
+
     if (!channel) {
 
         ticket.status =
@@ -2984,25 +3168,41 @@ async function closeTicket(
 
         await ticket.save();
 
-        return;
+        return null;
     }
 
     // ========================================================
-    // SAVE CLOSED-BY BEFORE TRANSCRIPT
+    // SAVE WHO CLOSED IT
     // ========================================================
 
     ticket.closedBy =
         userId;
 
+    // Save this immediately so the transcript
+    // knows who closed the ticket.
+    await ticket.save();
+
     // ========================================================
     // SEND TRANSCRIPT
+    // IMPORTANT:
+    // This NEVER prevents the ticket from closing.
     // ========================================================
 
-    await sendTicketTranscript(
-        guild,
-        ticket,
-        channel
-    );
+    try {
+
+        await sendTicketTranscript(
+            guild,
+            ticket,
+            channel
+        );
+
+    } catch (error) {
+
+        console.error(
+            "[27Pro] Ticket transcript failed:",
+            error
+        );
+    }
 
     // ========================================================
     // TICKET CONFIG
@@ -3014,7 +3214,7 @@ async function closeTicket(
         );
 
     // ========================================================
-    // LOCK TICKET
+    // LOCK ORIGINAL TICKET OWNER
     // ========================================================
 
     if (ticket.userId) {
@@ -3026,11 +3226,17 @@ async function closeTicket(
                     SendMessages: false
                 }
             )
-            .catch(() => {});
+            .catch(error => {
+
+                console.warn(
+                    "[27Pro] Could not lock ticket owner:",
+                    error.message
+                );
+            });
     }
 
     // ========================================================
-    // UPDATE DATABASE
+    // MARK CLOSED
     // ========================================================
 
     ticket.status =
@@ -3047,7 +3253,13 @@ async function closeTicket(
 
     await channel.setName(
         `closed-${String(ticket.number).padStart(4, "0")}`
-    ).catch(() => {});
+    ).catch(error => {
+
+        console.warn(
+            "[27Pro] Could not rename closed ticket:",
+            error.message
+        );
+    });
 
     // ========================================================
     // SEND CLOSE LOG
@@ -3073,7 +3285,9 @@ async function closeTicket(
                     name:
                         "Ticket Owner",
                     value:
-                        `<@${ticket.userId}>`,
+                        ticket.userId
+                            ? `<@${ticket.userId}>`
+                            : "Unknown",
                     inline:
                         true
                 },
