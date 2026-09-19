@@ -80,7 +80,6 @@ const client = new Client({
 // ============================================================
 // RUNTIME
 // ============================================================
-
 const xpCooldowns = new Map();
 const spamTracker = new Map();
 const duplicateTracker = new Map();
@@ -89,8 +88,10 @@ const securityTracker = new Map();
 const giveawayTimers = new Map();
 const reminderTimers = new Map();
 
-let kickChecker = null;
+let checkerInterval = null;
+let checkerRunning = false;
 let shuttingDown = false;
+let kickChecker = null;
 
 // ============================================================
 // SCHEMAS
