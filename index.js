@@ -12073,15 +12073,16 @@ async function shutdown27Pro(signal) {
 // ============================================================
 
 process.once(
-    "SIGINT",
-    () => {
-        shutdown27Pro("SIGINT");
-    }
-);
-
-process.once(
     "SIGTERM",
     () => {
+        console.log(
+            "[27Pro] SIGTERM received from Hostinger/process manager."
+        );
+
+        console.trace(
+            "[27Pro] SIGTERM trace:"
+        );
+
         shutdown27Pro("SIGTERM");
     }
 );
