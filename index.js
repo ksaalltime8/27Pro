@@ -12380,10 +12380,28 @@ process.once(
     }
 );
 // ============================================================
+// STARTUP STATE
+// ============================================================
+
+let startupCompleted = false;
+let startupInProgress = false;
+
+
+// ============================================================
 // STARTUP
 // ============================================================
 
 async function start27Pro() {
+
+    if (startupInProgress) {
+        console.warn(
+            "[27Pro] Startup already in progress."
+        );
+
+        return;
+    }
+
+    startupInProgress = true;
 
     console.log(
         "============================================================"
@@ -12397,122 +12415,158 @@ async function start27Pro() {
         "============================================================"
     );
 
-    // --------------------------------------------------------
-    // ENVIRONMENT
-    // --------------------------------------------------------
+    try {
 
-    if (!TOKEN) {
-        throw new Error(
-            "TOKEN is missing from .env"
-        );
-    }
+        // --------------------------------------------------------
+        // ENVIRONMENT
+        // --------------------------------------------------------
 
-    if (!CLIENT_ID) {
-        throw new Error(
-            "CLIENT_ID is missing from .env"
-        );
-    }
-
-    if (!MONGODB_URI) {
-        throw new Error(
-            "MONGODB_URI is missing from .env"
-        );
-    }
-
-    // --------------------------------------------------------
-    // MONGODB
-    // --------------------------------------------------------
-
-    console.log(
-        "[27Pro] Connecting to MongoDB..."
-    );
-
-    await mongoose.connect(
-        MONGODB_URI,
-        {
-            serverSelectionTimeoutMS:
-                15000
+        if (!TOKEN) {
+            throw new Error(
+                "TOKEN is missing from .env"
+            );
         }
-    );
 
-    console.log(
-        "[27Pro] MongoDB connected."
-    );
+        if (!CLIENT_ID) {
+            throw new Error(
+                "CLIENT_ID is missing from .env"
+            );
+        }
 
-    // --------------------------------------------------------
-    // HTTP HEALTH SERVER
-    // --------------------------------------------------------
+        if (!MONGODB_URI) {
+            throw new Error(
+                "MONGODB_URI is missing from .env"
+            );
+        }
 
-    const port =
-        Number(
-            PORT
-        ) || 5500;
+        // --------------------------------------------------------
+        // MONGODB
+        // --------------------------------------------------------
 
-    if (
-        !healthServer.listening
-    ) {
+        console.log(
+            "[27Pro] Connecting to MongoDB..."
+        );
 
-        await new Promise(
-            (resolve, reject) => {
-
-                const onError =
-                    error => {
-
-                        healthServer.removeListener(
-                            "listening",
-                            onListening
-                        );
-
-                        reject(
-                            error
-                        );
-                    };
-
-                const onListening =
-                    () => {
-
-                        healthServer.removeListener(
-                            "error",
-                            onError
-                        );
-
-                        resolve();
-                    };
-
-                healthServer.once(
-                    "error",
-                    onError
-                );
-
-                healthServer.once(
-                    "listening",
-                    onListening
-                );
-
-                healthServer.listen(
-                    port,
-                    "0.0.0.0"
-                );
+        await mongoose.connect(
+            MONGODB_URI,
+            {
+                serverSelectionTimeoutMS:
+                    15000
             }
         );
 
         console.log(
-            `[27Pro] Health server listening on port ${port}`
+            "[27Pro] MongoDB connected."
         );
+
+        // --------------------------------------------------------
+        // HTTP HEALTH SERVER
+        // --------------------------------------------------------
+
+        const port =
+            Number(PORT) || 5500;
+
+        if (
+            shuttingDown
+        ) {
+            return;
+        }
+
+        if (
+            !healthServer.listening
+        ) {
+
+            await new Promise(
+                (resolve, reject) => {
+
+                    const onError =
+                        error => {
+
+                            healthServer.removeListener(
+                                "listening",
+                                onListening
+                            );
+
+                            reject(
+                                error
+                            );
+                        };
+
+                    const onListening =
+                        () => {
+
+                            healthServer.removeListener(
+                                "error",
+                                onError
+                            );
+
+                            resolve();
+                        };
+
+                    healthServer.once(
+                        "error",
+                        onError
+                    );
+
+                    healthServer.once(
+                        "listening",
+                        onListening
+                    );
+
+                    healthServer.listen(
+                        port,
+                        "0.0.0.0"
+                    );
+                }
+            );
+
+            console.log(
+                `[27Pro] Health server listening on port ${port}`
+            );
+        }
+
+        // --------------------------------------------------------
+        // CHECK BEFORE DISCORD LOGIN
+        // --------------------------------------------------------
+
+        if (
+            shuttingDown
+        ) {
+
+            console.warn(
+                "[27Pro] Startup cancelled because shutdown was requested."
+            );
+
+            return;
+        }
+
+        // --------------------------------------------------------
+        // DISCORD LOGIN
+        // --------------------------------------------------------
+
+        console.log(
+            "[27Pro] Logging into Discord..."
+        );
+
+        await client.login(
+            TOKEN
+        );
+
+    } catch (error) {
+
+        console.error(
+            "[27Pro] STARTUP ERROR:",
+            error
+        );
+
+        throw error;
+
+    } finally {
+
+        startupInProgress = false;
     }
-
-    // --------------------------------------------------------
-    // DISCORD
-    // --------------------------------------------------------
-
-    console.log(
-        "[27Pro] Logging into Discord..."
-    );
-
-    await client.login(
-        TOKEN
-    );
 }
+
 
 // ============================================================
 // READY
@@ -12521,6 +12575,32 @@ async function start27Pro() {
 client.once(
     "ready",
     async () => {
+
+        // --------------------------------------------------------
+        // DO NOT CONTINUE IF HOSTINGER IS SHUTTING US DOWN
+        // --------------------------------------------------------
+
+        if (
+            shuttingDown
+        ) {
+
+            console.warn(
+                "[27Pro] READY received during shutdown. Ignoring initialization."
+            );
+
+            return;
+        }
+
+        if (
+            startupCompleted
+        ) {
+
+            console.warn(
+                "[27Pro] READY initialization already completed."
+            );
+
+            return;
+        }
 
         try {
 
@@ -12548,6 +12628,12 @@ client.once(
             // PRESENCE
             // ------------------------------------------------
 
+            if (
+                shuttingDown
+            ) {
+                return;
+            }
+
             client.user.setPresence({
                 activities: [
                     {
@@ -12565,7 +12651,32 @@ client.once(
             // GLOBAL SLASH COMMANDS
             // ------------------------------------------------
 
+            if (
+                shuttingDown
+            ) {
+                return;
+            }
+
+            console.log(
+                "[27Pro] Cleaning old guild slash commands..."
+            );
+
             await registerCommands();
+
+            // ------------------------------------------------
+            // CHECK AFTER COMMAND REGISTRATION
+            // ------------------------------------------------
+
+            if (
+                shuttingDown
+            ) {
+
+                console.warn(
+                    "[27Pro] Shutdown requested during command registration."
+                );
+
+                return;
+            }
 
             console.log(
                 "[27Pro] Global slash commands registered."
@@ -12575,10 +12686,26 @@ client.once(
             // DATABASE RECOVERY
             // ------------------------------------------------
 
+            if (
+                shuttingDown
+            ) {
+                return;
+            }
+
             await start27ProBackgroundSystems();
 
             // ------------------------------------------------
-            // KICK
+            // CHECK AFTER DATABASE SYSTEMS
+            // ------------------------------------------------
+
+            if (
+                shuttingDown
+            ) {
+                return;
+            }
+
+            // ------------------------------------------------
+            // KICK CHECKER
             // ------------------------------------------------
 
             start27ProKickChecker();
@@ -12586,6 +12713,18 @@ client.once(
             console.log(
                 "[27Pro] KICK checker started."
             );
+
+            // ------------------------------------------------
+            // FINAL CHECK
+            // ------------------------------------------------
+
+            if (
+                shuttingDown
+            ) {
+                return;
+            }
+
+            startupCompleted = true;
 
             console.log(
                 "[27Pro] All systems are online."
@@ -12597,9 +12736,11 @@ client.once(
                 "[27Pro] Ready initialization error:",
                 error
             );
+
         }
     }
 );
+
 
 // ============================================================
 // BOOT
@@ -12628,6 +12769,7 @@ start27Pro()
             try {
 
                 if (
+                    healthServer &&
                     healthServer.listening
                 ) {
 
@@ -12639,12 +12781,11 @@ start27Pro()
             try {
 
                 if (
-                    mongoose.connection.readyState !==
-                    0
+                    mongoose.connection &&
+                    mongoose.connection.readyState !== 0
                 ) {
 
-                    await mongoose.connection
-                        .close();
+                    await mongoose.connection.close();
                 }
 
             } catch {}
