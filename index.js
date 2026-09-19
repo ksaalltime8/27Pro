@@ -16,6 +16,7 @@ const {
     EmbedBuilder,
     PermissionFlagsBits,
     SlashCommandBuilder,
+    StringSelectMenuBuilder,
     REST,
     Routes,
     ChannelType,
@@ -10007,157 +10008,157 @@ client.on("interactionCreate", async interaction => {
             });
         }
 
+        // ============================================================
+// /rules
+// ============================================================
+
+if (
+    interaction.isChatInputCommand() &&
+    interaction.commandName === "rules"
+) {
+    try {
+
+        const config =
+            await RulesConfig.findOne({
+                guildId:
+                    interaction.guild.id
+            });
+
+        if (!config) {
+
+            return interaction.reply({
+                content:
+                    "❌ Rules have not been configured yet.",
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+
         // ====================================================
-        // RULES
+        // RULES EMBED
         // ====================================================
 
+        const rulesEmbed =
+            new EmbedBuilder()
+                .setColor(
+                    config.color || 0x5865f2
+                )
+                .setTitle(
+                    config.title ||
+                    "📜 Server Rules"
+                )
+                .setDescription(
+                    config.description ||
+                    "Please read and follow all server rules."
+                )
+                .setFooter({
+                    text:
+                        interaction.guild.name
+                })
+                .setTimestamp();
+
+        // ====================================================
+        // RULES DROPDOWN
+        // ====================================================
+
+        const options = [];
+
+        // If your config has actual rules
         if (
-            command === "rules"
+            Array.isArray(config.rules) &&
+            config.rules.length
         ) {
 
-            const subcommand =
-                interaction.options.getSubcommand();
+            config.rules.forEach(
+                (rule, index) => {
 
-            if (
-                subcommand === "setup"
-            ) {
+                    options.push({
 
-                if (
-                    !interaction.memberPermissions.has(
-                        PermissionFlagsBits.ManageGuild
-                    )
-                ) {
-                    return interaction.reply({
-                        content:
-                            "❌ You need **Manage Server** permission.",
-                        flags:
-                            MessageFlags.Ephemeral
+                        label:
+                            String(
+                                rule.name ||
+                                rule.title ||
+                                `Rule ${index + 1}`
+                            ).slice(0, 100),
+
+                        description:
+                            String(
+                                rule.description ||
+                                rule.text ||
+                                "View this rule."
+                            ).slice(0, 100),
+
+                        value:
+                            `rule_${index}`
                     });
                 }
-
-                const channel =
-                    interaction.options.getChannel(
-                        "channel"
-                    );
-
-                const text =
-                    interaction.options.getString(
-                        "text"
-                    );
-
-                await RulesConfig.findOneAndUpdate(
-                    {
-                        guildId:
-                            interaction.guild.id
-                    },
-                    {
-                        guildId:
-                            interaction.guild.id,
-                        enabled:
-                            true,
-                        channelId:
-                            channel.id,
-                        text
-                    },
-                    {
-                        upsert:
-                            true,
-                        new:
-                            true
-                    }
-                );
-
-                await channel.send({
-                    embeds: [
-                        embed(0xff0055)
-                            .setTitle(
-                                "📜 Server Rules"
-                            )
-                            .setDescription(
-                                text
-                            )
-                    ]
-                });
-
-                return interaction.reply({
-                    content:
-                        `✅ Rules posted in ${channel}.`
-                });
-            }
-
-            if (
-                subcommand === "show"
-            ) {
-
-                const rules =
-                    await RulesConfig.findOne({
-                        guildId:
-                            interaction.guild.id,
-                        enabled:
-                            true
-                    });
-
-                if (!rules) {
-                    return interaction.reply({
-                        content:
-                            "❌ No rules have been configured.",
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-                }
-
-                return interaction.reply({
-                    embeds: [
-                        embed(0xff0055)
-                            .setTitle(
-                                "📜 Server Rules"
-                            )
-                            .setDescription(
-                                rules.text ||
-                                "No rules configured."
-                            )
-                    ]
-                });
-            }
-
-            if (
-                subcommand === "disable"
-            ) {
-
-                if (
-                    !interaction.memberPermissions.has(
-                        PermissionFlagsBits.ManageGuild
-                    )
-                ) {
-                    return interaction.reply({
-                        content:
-                            "❌ You need **Manage Server** permission.",
-                        flags:
-                            MessageFlags.Ephemeral
-                    });
-                }
-
-                await RulesConfig.findOneAndUpdate(
-                    {
-                        guildId:
-                            interaction.guild.id
-                    },
-                    {
-                        enabled:
-                            false
-                    },
-                    {
-                        upsert:
-                            true
-                    }
-                );
-
-                return interaction.reply({
-                    content:
-                        "✅ Rules system disabled."
-                });
-            }
+            );
         }
+
+        // ====================================================
+        // SEND RULES
+        // ====================================================
+
+        if (options.length) {
+
+            const menu =
+                new StringSelectMenuBuilder()
+                    .setCustomId(
+                        "rules:select"
+                    )
+                    .setPlaceholder(
+                        "📖 Select a rule to view"
+                    )
+                    .addOptions(
+                        options.slice(0, 25)
+                    );
+
+            const row =
+                new ActionRowBuilder()
+                    .addComponents(
+                        menu
+                    );
+
+            return interaction.reply({
+                embeds: [
+                    rulesEmbed
+                ],
+                components: [
+                    row
+                ]
+            });
+        }
+
+        // No dropdown rules configured
+        return interaction.reply({
+            embeds: [
+                rulesEmbed
+            ]
+        });
+
+    } catch (error) {
+
+        console.error(
+            "[27Pro] /rules error:",
+            error
+        );
+
+        if (
+            !interaction.replied &&
+            !interaction.deferred
+        ) {
+
+            return interaction.reply({
+                content:
+                    "❌ Failed to load the server rules.",
+                flags:
+                    MessageFlags.Ephemeral
+            });
+        }
+    }
+
+    return;
+}
 
         // ====================================================
         // KICK LIVE
